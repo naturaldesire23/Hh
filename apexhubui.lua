@@ -1,4 +1,4 @@
--- --- apexhubui.lua (Key System) ---
+-- --- apexhubui.lua (Key System - Fetch Patched) ---
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
@@ -185,7 +185,21 @@ SubmitBtn.MouseButton1Click:Connect(function()
         NotifGui:Destroy()
         KeyUI:Destroy()
         
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/naturaldesire23/gardent2/refs/heads/main/apexhubb.lua"))()
+        local hubUrl = "https://raw.githubusercontent.com/naturaldesire23/gardent2/refs/heads/main/apexhubb.lua"
+        local success, response = pcall(function()
+            return game:HttpGet(hubUrl)
+        end)
+        
+        if success and response and response ~= "" then
+            local loadSuccess, loadErr = pcall(function()
+                loadstring(response)()
+            end)
+            if not loadSuccess then
+                warn("ApexHub Execution Error: " .. tostring(loadErr))
+            end
+        else
+            warn("ApexHub Fetch Failed. URL returned nil or error. Check if repo is public and file exists.")
+        end
     else
         TweenService:Create(MainWindow, TweenInfo.new(0.05, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(0.5, -165, 0.5, -90)}):Play()
         task.wait(0.05)
