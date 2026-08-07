@@ -1,3 +1,4 @@
+-- --- apexhubui.lua (Key System) ---
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
@@ -25,15 +26,15 @@ UIStroke.Parent = MainWindow
 local StrokeGradient = Instance.new("UIGradient")
 StrokeGradient.Rotation = 0
 StrokeGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(50, 54, 62)),
-    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(140, 150, 165)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(50, 54, 62))
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(43, 28, 92)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(120, 70, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(28, 60, 135))
 })
 StrokeGradient.Parent = UIStroke
 
 local BgGradient = Instance.new("UIGradient")
 BgGradient.Rotation = 90
-BgGradient.Color = ColorSequence.new(Color3.fromRGB(35, 37, 42), Color3.fromRGB(18, 19, 22))
+BgGradient.Color = ColorSequence.new(Color3.fromRGB(35, 28, 52), Color3.fromRGB(18, 19, 32))
 BgGradient.Parent = MainWindow
 
 local TitleLabel = Instance.new("TextLabel")
@@ -91,9 +92,9 @@ BtnStroke.Parent = SubmitBtn
 local BtnStrokeGrad = Instance.new("UIGradient")
 BtnStrokeGrad.Rotation = 0
 BtnStrokeGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(50, 54, 62)),
-    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(140, 150, 165)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(50, 54, 62))
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(43, 28, 92)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(120, 70, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(28, 60, 135))
 })
 BtnStrokeGrad.Parent = BtnStroke
 
@@ -122,6 +123,7 @@ SubmitBtn.MouseButton1Click:Connect(function()
     local key = KeyInput.Text
     if key == "ApexUI" then
         SubmitBtn.Text = "Verified"
+        
         TweenService:Create(SubmitBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 1}):Play()
         TweenService:Create(TitleLabel, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 1}):Play()
         TweenService:Create(KeyInput, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 1, BackgroundTransparency = 1}):Play()
@@ -136,18 +138,22 @@ SubmitBtn.MouseButton1Click:Connect(function()
         MainWindow:Destroy()
 
         local NotifGui = Instance.new("ScreenGui")
-        NotifGui.Name = "ApexNotifs"
+        NotifGui.Name = "ApexNotifTemp"
         NotifGui.ResetOnSpawn = false
         NotifGui.Parent = (gethui and gethui() or CoreGui)
+        
         local Notif = Instance.new("Frame")
         Notif.Size = UDim2.new(0, 240, 0, 70)
-        Notif.Position = UDim2.new(1, -260, 0, 10)
+        Notif.Position = UDim2.new(1, 0, 0, 10)
         Notif.BackgroundColor3 = Color3.fromRGB(22, 24, 28)
         Notif.BorderSizePixel = 0
         Notif.Parent = NotifGui
+        Notif.ClipsDescendants = true
+        
         local NCorner = Instance.new("UICorner")
         NCorner.CornerRadius = UDim.new(0, 6)
         NCorner.Parent = Notif
+        
         local NTitle = Instance.new("TextLabel")
         NTitle.Size = UDim2.new(1, -20, 0, 20)
         NTitle.Position = UDim2.new(0, 14, 0, 14)
@@ -158,6 +164,7 @@ SubmitBtn.MouseButton1Click:Connect(function()
         NTitle.TextSize = 14
         NTitle.TextXAlignment = Enum.TextXAlignment.Left
         NTitle.Parent = Notif
+        
         local NDesc = Instance.new("TextLabel")
         NDesc.Size = UDim2.new(1, -20, 0, 20)
         NDesc.Position = UDim2.new(0, 14, 0, 36)
@@ -169,23 +176,16 @@ SubmitBtn.MouseButton1Click:Connect(function()
         NDesc.TextXAlignment = Enum.TextXAlignment.Left
         NDesc.Parent = Notif
 
-        Notif.Position = UDim2.new(1, 0, 0, 10)
         TweenService:Create(Notif, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(1, -260, 0, 10)}):Play()
 
-        task.delay(2, function()
-            TweenService:Create(Notif, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(1, 20, 0, 10)}):Play()
-            task.wait(0.3)
-            NotifGui:Destroy()
-        end)
+        task.wait(1.5)
+        TweenService:Create(Notif, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(1, 20, 0, 10)}):Play()
         
-        task.wait(1)
-        local success, err = pcall(function()
-            loadstring(game:HttpGet("YOUR_APEXHUB_RAW_URL_HERE"))()
-        end)
+        task.wait(0.3)
+        NotifGui:Destroy()
+        KeyUI:Destroy()
         
-        if not success then
-            warn("Failed to load ApexHub: " .. tostring(err))
-        end
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/naturaldesire23/gardent2/refs/heads/main/apexhubb.lua"))()
     else
         TweenService:Create(MainWindow, TweenInfo.new(0.05, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(0.5, -165, 0.5, -90)}):Play()
         task.wait(0.05)
