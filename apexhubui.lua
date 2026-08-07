@@ -1,5 +1,3 @@
--- --- KeySystem.lua ---
--- Deployment: Stage 1 - Access Validation
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
@@ -99,7 +97,6 @@ BtnStrokeGrad.Color = ColorSequence.new({
 })
 BtnStrokeGrad.Parent = BtnStroke
 
--- Draggable
 local Dragging, DragInput, DragStart, StartPos
 MainWindow.InputBegan:Connect(function(Input)
     if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
@@ -124,10 +121,20 @@ end)
 SubmitBtn.MouseButton1Click:Connect(function()
     local key = KeyInput.Text
     if key == "ApexUI" then
-        TweenService:Create(MainWindow, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0, 350, 0, 0)}):Play()
-        task.wait(0.2)
+        SubmitBtn.Text = "Verified"
+        TweenService:Create(SubmitBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 1}):Play()
+        TweenService:Create(TitleLabel, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 1}):Play()
+        TweenService:Create(KeyInput, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 1, BackgroundTransparency = 1}):Play()
+        TweenService:Create(InputStroke, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Transparency = 1}):Play()
+        TweenService:Create(BtnStroke, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Transparency = 1}):Play()
+        TweenService:Create(UIStroke, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Transparency = 1}):Play()
         
-        -- Notification
+        task.wait(0.2)
+        TweenService:Create(MainWindow, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0, 350, 0, 0), BackgroundTransparency = 1}):Play()
+        
+        task.wait(0.3)
+        MainWindow:Destroy()
+
         local NotifGui = Instance.new("ScreenGui")
         NotifGui.Name = "ApexNotifs"
         NotifGui.ResetOnSpawn = false
@@ -165,11 +172,13 @@ SubmitBtn.MouseButton1Click:Connect(function()
         Notif.Position = UDim2.new(1, 0, 0, 10)
         TweenService:Create(Notif, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(1, -260, 0, 10)}):Play()
 
-        task.wait(1.5)
-        KeyUI:Destroy()
+        task.delay(2, function()
+            TweenService:Create(Notif, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(1, 20, 0, 10)}):Play()
+            task.wait(0.3)
+            NotifGui:Destroy()
+        end)
         
-        -- Load Hub
-        -- Replace with your hosted ApexHub URL
+        task.wait(1)
         local success, err = pcall(function()
             loadstring(game:HttpGet("YOUR_APEXHUB_RAW_URL_HERE"))()
         end)
@@ -178,7 +187,6 @@ SubmitBtn.MouseButton1Click:Connect(function()
             warn("Failed to load ApexHub: " .. tostring(err))
         end
     else
-        -- Invalid key shake
         TweenService:Create(MainWindow, TweenInfo.new(0.05, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(0.5, -165, 0.5, -90)}):Play()
         task.wait(0.05)
         TweenService:Create(MainWindow, TweenInfo.new(0.05, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(0.5, -185, 0.5, -90)}):Play()
