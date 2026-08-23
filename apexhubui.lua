@@ -1,8 +1,8 @@
 -- ============================================================
--- NexUI_Lib.lua  v1.0
+-- NexUI_Lib.lua  v1.1
 -- Merged from PortalVisuals_Lib + UwU Premium AP
 -- Structure: Portal Visuals | Visuals/Toasts: UwU Premium
--- Fixed window position (no drag). Init sequence: custom.
+-- Fixed window clipping (CanvasGroup) & removed unicode artifacts.
 -- ============================================================
 
 local Players           = game:GetService("Players")
@@ -415,14 +415,16 @@ function NexUI:Toast(title, body, duration, color)
         TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 212,
     })
 
-    -- Close button
+    -- Close button (Drawn X to prevent missing character boxes)
     local closeBtn = Create("TextButton", {
         Parent = pill, BackgroundTransparency = 1,
         Position = UDim2.new(1, -24, 0, 0), Size = UDim2.new(0, 24, 1, 0),
-        Font = Enum.Font.GothamBold, Text = "×",
-        TextColor3 = T.TextMuted, TextSize = 16,
-        AutoButtonColor = false, ZIndex = 213,
+        Text = "", AutoButtonColor = false, ZIndex = 213,
     })
+    local x1 = Create("Frame", { Parent = closeBtn, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 8, 0, 1.5), BackgroundColor3 = T.TextMuted, Rotation = 45, BorderSizePixel = 0 })
+    local x2 = Create("Frame", { Parent = closeBtn, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 8, 0, 1.5), BackgroundColor3 = T.TextMuted, Rotation = -45, BorderSizePixel = 0 })
+    self:_reg(x1, "BackgroundColor3", "TextMuted")
+    self:_reg(x2, "BackgroundColor3", "TextMuted")
 
     -- Progress bar
     local pgBg = Create("Frame", {
@@ -446,6 +448,8 @@ function NexUI:Toast(title, body, duration, color)
         Tween(pill, {Position = UDim2.new(0, 340, 0, 0), BackgroundTransparency = 1}, 0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
         Tween(titleLbl, {TextTransparency = 1}, 0.2)
         Tween(bodyLbl,  {TextTransparency = 1}, 0.2)
+        Tween(x1, {BackgroundTransparency = 1}, 0.2)
+        Tween(x2, {BackgroundTransparency = 1}, 0.2)
         task.delay(0.3, function()
             Tween(wrapper, {Size = UDim2.new(1, 0, 0, 0)}, 0.22, Enum.EasingStyle.Quint)
             task.delay(0.25, function()
@@ -852,7 +856,8 @@ function NexUI:_buildMainWindow(title, subtitle)
     local T = self._theme
     local W, H = self._W, self._H
 
-    local win = Create("Frame", {
+    -- Changed to CanvasGroup to fix corner clipping (transparent squares at edges)
+    local win = Create("CanvasGroup", {
         Name = "NexWin", Parent = self._gui,
         BackgroundColor3 = T.GlassBg, BackgroundTransparency = 0.06,
         BorderSizePixel = 0,
@@ -860,6 +865,7 @@ function NexUI:_buildMainWindow(title, subtitle)
         Position = UDim2.new(0.5, 0, 0.5, 0),
         Size = UDim2.new(0, W, 0, H),
         Visible = false, ClipsDescendants = true, ZIndex = 1,
+        GroupTransparency = 0,
     })
     Corner(win, 22)
     local winStroke = Stroke(win, T.Stroke, 2, 0.4)
@@ -873,6 +879,7 @@ function NexUI:_buildMainWindow(title, subtitle)
         BackgroundTransparency = 0.93, BorderSizePixel = 0,
         Size = UDim2.new(1, 0, 0.42, 0), ZIndex = 3,
     })
+    Corner(shine, 22) -- Added corner to match window
     Create("UIGradient", {
         Parent = shine, Rotation = 90,
         Transparency = NumberSequence.new({
@@ -1505,7 +1512,7 @@ function NexUI:_buildSection(parent, sectionTitle)
         }
     end
 
-    -- ── Dropdown ──
+    -- ── Dropdown ── (Fixed missing character boxes by drawing the arrow)
     function Sec:Dropdown(label, options, default, callback)
         local T2 = win._theme
         local selected = default or options[1]
@@ -1521,15 +1528,32 @@ function NexUI:_buildSection(parent, sectionTitle)
             Parent = frame, BackgroundColor3 = T2.GlassCard,
             BackgroundTransparency = 0.45, BorderSizePixel = 0,
             Size = UDim2.new(1, 0, 0, 34),
-            Font = Enum.Font.GothamBold,
-            Text = "  ▾  " .. selected,
-            TextColor3 = T2.Text, TextSize = 12,
-            AutoButtonColor = false, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 11,
+            Text = "",
+            AutoButtonColor = false, ZIndex = 11,
         })
         win:_reg(header, "BackgroundColor3", "GlassCard")
-        win:_reg(header, "TextColor3", "Text")
         Corner(header, 16)
         Stroke(header, T2.Stroke, 1, 0.5)
+
+        local headerLbl = Create("TextLabel", {
+            Parent = header, BackgroundTransparency = 1,
+            Position = UDim2.new(0, 12, 0, 0),
+            Size = UDim2.new(1, -30, 1, 0),
+            Font = Enum.Font.GothamBold, Text = selected,
+            TextColor3 = T2.Text, TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 12,
+        })
+        win:_reg(headerLbl, "TextColor3", "Text")
+
+        local chevHolder = Create("Frame", {
+            Parent = header, BackgroundTransparency = 1,
+            AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0),
+            Size = UDim2.new(0, 12, 0, 12), ZIndex = 12,
+        })
+        local c1 = Create("Frame", { Parent = chevHolder, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 4, 0, 6), Size = UDim2.new(0, 7, 0, 2), BackgroundColor3 = T2.TextSoft, Rotation = 45, BorderSizePixel = 0 })
+        local c2 = Create("Frame", { Parent = chevHolder, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 8, 0, 6), Size = UDim2.new(0, 7, 0, 2), BackgroundColor3 = T2.TextSoft, Rotation = -45, BorderSizePixel = 0 })
+        win:_reg(c1, "BackgroundColor3", "TextSoft")
+        win:_reg(c2, "BackgroundColor3", "TextSoft")
 
         local dropdown = Create("Frame", {
             Parent = frame, BackgroundColor3 = T2.GlassCard,
@@ -1562,7 +1586,7 @@ function NexUI:_buildSection(parent, sectionTitle)
             ob.MouseLeave:Connect(function() Tween(ob, {BackgroundTransparency = opt == selected and 0.3 or 0.85}, 0.12, Enum.EasingStyle.Sine) end)
             ob.MouseButton1Click:Connect(function()
                 selected = opt
-                header.Text = "  ▾  " .. selected
+                headerLbl.Text = selected
                 if callback then task.spawn(callback, selected) end
                 Tween(dropdown, {Size = UDim2.new(1, 0, 0, 0)}, 0.22)
                 task.delay(0.24, function() dropdown.Visible = false end)
