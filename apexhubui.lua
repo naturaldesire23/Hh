@@ -1,1460 +1,1765 @@
--- [[ BYTE LITE - ALLUSIVE FIXED ]] --
--- UI: Allusive library (naturaldesire23)
--- All features work. Keybinds: click checkbox label → press key → binds instantly.
+-- ============================================================
+-- NexUI_Lib.lua  v1.0
+-- Merged from PortalVisuals_Lib + UwU Premium AP
+-- Structure: Portal Visuals | Visuals/Toasts: UwU Premium
+-- Fixed window position (no drag). Init sequence: custom.
+-- ============================================================
 
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local Stats = game:GetService("Stats")
-local HttpService = game:GetService("HttpService")
-local Debris = game:GetService("Debris")
-local CoreGui = game:GetService("CoreGui")
-local TweenService = game:GetService("TweenService")
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local RunService        = game:GetService("RunService")
+local UserInputService  = game:GetService("UserInputService")
+local Stats             = game:GetService("Stats")
+local CoreGui           = game:GetService("CoreGui")
+local Lighting          = game:GetService("Lighting")
 
 local LocalPlayer = Players.LocalPlayer
-local Alive = workspace:FindFirstChild("Alive") or workspace:WaitForChild("Alive")
-local Runtime = workspace:FindFirstChild("Runtime")
 
--- ===== CONFIG =====
-local ConfigFile = "ByteLite_Config.json"
-local Settings = {}
-
-local function LoadSettings()
-    pcall(function()
-        if isfile and isfile(ConfigFile) then
-            local d = readfile(ConfigFile)
-            if d and d ~= "" then Settings = HttpService:JSONDecode(d) end
-        end
-    end)
-    local defaults = {
-        AutoParry=false, ParryMode="Remote", CurveType="Camera", ParryAccuracy=50,
-        AntiCurve=false, RandomAccuracy=false, GrabParry=false,
-        ManualSpam=false, ManualSpamCPS=60,
-        AutoSpam=false, AutoSpamMode="Remote", AutoSpamModeType="Distance", DistanceMultiplier=0.15,
-        InfinityDetection=false, DeathSlashDetection=false, TimeHoleDetection=false,
-        SlashesofFuryDetection=false, ForcefieldDetection=false, PhantomDetection=false,
-        SingularityDetection=false, DribbleDetection=false, PullDetection=false,
-        PulseDetection=false, AbilityActiveDetection=false, TornadoDetection=false,
-        HellHookDetection=false,
-        BallStylingEnabled=false, KillSoundEnabled=false, SelectedKillSound="Fahhhh",
-        KB_ManualSpam="E", KB_AutoParry="V", KB_AutoSpam="G", KB_ChromaBall="B",
-    }
-    for k,v in pairs(defaults) do if Settings[k] == nil then Settings[k] = v end end
+if _G._NexUI and _G._NexUI._cleanup then
+    pcall(_G._NexUI._cleanup)
 end
+_G._NexUI = {}
+local _lib = _G._NexUI
 
-local function SaveSettings()
-    pcall(function() if writefile then writefile(ConfigFile, HttpService:JSONEncode(Settings)) end end)
-end
-LoadSettings()
-
--- ===== PING =====
-getgenv()._ZX_PingCache = getgenv()._ZX_PingCache or 50
-if not getgenv()._ZX_PingUpdater then
-    getgenv()._ZX_PingUpdater = true
-    task.spawn(function()
-        local net = Stats:WaitForChild("Network",30); if not net then return end
-        local ss = net:WaitForChild("ServerStatsItem",30); if not ss then return end
-        local dp = ss:WaitForChild("Data Ping",30); if not dp then return end
-        while true do getgenv()._ZX_PingCache = dp:GetValue(); task.wait(0.1) end
-    end)
-end
-local function getPing() return math.floor(getgenv()._ZX_PingCache or 0) end
-
--- ===== PARRY PATCH =====
-local _PARRY_PATCH = {
-    keyTable=nil, transformFn=nil, netModule=nil,
-    remoteId=nil, parryHash=nil, parryRemote=nil,
-    ready=false, _lastSig=nil,
-}
-local original_debug_info = getrenv().debug.info
-local original_getfenv = getrenv().getfenv
-
-task.spawn(function()
-    repeat task.wait(1) until game:IsLoaded()
-    task.wait(2)
-    local old_dinfo
-    old_dinfo = hookfunction(getrenv().debug.info, function(f,t)
-        if type(f)=="function" then return "[C]"
-        elseif f==4 and t=="s" then return "ReplicatedStorage.Controllers.SwordsController " end
-        return old_dinfo(f,t)
-    end)
-    local old_gfenv
-    old_gfenv = hookfunction(getrenv().getfenv, function(l)
-        if l ~= nil and type(l)=="number" then
-            if l>=1 and l<=10 then return old_gfenv(10) end
-        end
-        return old_gfenv(l)
-    end)
-    pcall(function()
-        local Controllers = ReplicatedStorage:WaitForChild("Controllers",5)
-        if not Controllers then return end
-        local SC_mod
-        for _,child in ipairs(Controllers:GetChildren()) do
-            if child.Name:sub(1,16)=="SwordsController" then SC_mod=child; break end
-        end
-        if not SC_mod then return end
-        local PRY = SC_mod:FindFirstChild("PRY")
-        if not PRY then return end
-        local Parry_Function = require(PRY)
-        local getupvals = debug.getupvalues or getupvals
-        if not getupvals then return end
-        local ups = getupvals(Parry_Function)
-        if not ups or #ups < 8 then return end
-        _PARRY_PATCH.keyTable = ups[3]
-        _PARRY_PATCH.transformFn = ups[4]
-        _PARRY_PATCH.netModule = ups[6]
-        _PARRY_PATCH.remoteId = ups[7]
-        _PARRY_PATCH.parryHash = ups[8]
-        pcall(function() _PARRY_PATCH.parryRemote = _PARRY_PATCH.netModule:RemoteEvent(_PARRY_PATCH.remoteId) end)
-        if _PARRY_PATCH.parryRemote then _PARRY_PATCH.ready = true end
-    end)
-    pcall(function()
-        hookfunction(getrenv().debug.info, original_debug_info)
-        hookfunction(getrenv().getfenv, original_getfenv)
-    end)
-    print("[Byte Lite] Bypass captured")
-end)
-
-function _PARRY_PATCH.fire(curveCFrame, screenPositions, mouseLocation)
-    if not _PARRY_PATCH.ready then return false end
-    local kt = _PARRY_PATCH.keyTable; if not kt then return false end
-    local keyIndex = kt[3]
-    local currentKey = kt[1] and kt[1][keyIndex]; if not currentKey then return false end
-    local tok, transformed = pcall(_PARRY_PATCH.transformFn, currentKey, "TIME")
-    if not tok or not transformed then
-        tok, transformed = pcall(_PARRY_PATCH.transformFn, currentKey)
-        if not tok or not transformed then return false end
-    end
-    local serverTime = workspace:GetServerTimeNow()*100
-    local timeStr = tostring(math.floor(serverTime))
-    local sig = tostring(currentKey).."|"..timeStr
-    if _PARRY_PATCH._lastSig == sig then return true end
-    _PARRY_PATCH._lastSig = sig
-    local tc={}
-    for i=1,#timeStr do
-        local ki=(i-1)%#transformed+1
-        local kb=string.byte(transformed,ki)
-        local tb=(string.byte(timeStr,i)+i)%256
-        tc[i]=string.char(bit32.bxor(tb,kb))
-    end
-    local token=table.concat(tc)
-    pcall(function()
-        _PARRY_PATCH.parryRemote:FireServer(
-            _PARRY_PATCH.parryHash, currentKey, token,
-            0.5, curveCFrame, screenPositions, mouseLocation, false
-        )
-    end)
-    return true
-end
-
--- ===== ABILITY FLAGS =====
-local AbilityFlags = {
-    InfinityBall=false, DeathSlashBall=false, TimeHole=false,
-    SlashesofFury=false, Forcefield=false, Phantom=false,
-    Singularity=false, Dribble=false, Pull=false, Pulse=false,
-    AbilityActive=false, Tornado=false, HellHook=false,
-}
-
--- ===== SYSTEM =====
-local System = {
-    __properties = {
-        __autoparry_enabled = Settings.AutoParry,
-        __accuracy = Settings.ParryAccuracy,
-        __first_parry_done = false,
-        __manual_spam_enabled = false,
-        __auto_spam_enabled = false,
-        __connections = {},
-        __parried = false,
-        __parries = 0,
-        __curve_mode = Settings.CurveType,
-        __grab_parry_enabled = Settings.GrabParry,
-        __random_accuracy = Settings.RandomAccuracy,
-        __fake_body_enabled = false,
+-- ─────────────────────────────────────────────────────────────
+-- THEMES
+-- ─────────────────────────────────────────────────────────────
+local Themes = {
+    Dark = {
+        GlassBg   = Color3.fromRGB(14, 16, 22),
+        GlassLeft = Color3.fromRGB(20, 22, 32),
+        GlassCard = Color3.fromRGB(28, 31, 44),
+        Accent    = Color3.fromRGB(120, 80, 255),
+        Accent2   = Color3.fromRGB(170, 110, 255),
+        Text      = Color3.fromRGB(240, 245, 255),
+        TextSoft  = Color3.fromRGB(160, 170, 200),
+        TextMuted = Color3.fromRGB(90, 100, 130),
+        Online    = Color3.fromRGB(50, 220, 120),
+        TrackOff  = Color3.fromRGB(45, 50, 72),
+        TrackOn   = Color3.fromRGB(120, 80, 255),
+        Stroke    = Color3.fromRGB(50, 55, 80),
+        Shine     = Color3.fromRGB(255, 255, 255),
+        Warn      = Color3.fromRGB(200, 140, 25),
+        Danger    = Color3.fromRGB(215, 65, 65),
     },
-    ball={}, player={}, parry={}, autoparry={}, manual_spam={}, auto_spam={},
+    Midnight = {
+        GlassBg   = Color3.fromRGB(6, 8, 18),
+        GlassLeft = Color3.fromRGB(10, 12, 26),
+        GlassCard = Color3.fromRGB(18, 20, 36),
+        Accent    = Color3.fromRGB(0, 180, 255),
+        Accent2   = Color3.fromRGB(60, 220, 255),
+        Text      = Color3.fromRGB(220, 235, 255),
+        TextSoft  = Color3.fromRGB(130, 155, 200),
+        TextMuted = Color3.fromRGB(70, 90, 140),
+        Online    = Color3.fromRGB(60, 230, 150),
+        TrackOff  = Color3.fromRGB(30, 36, 60),
+        TrackOn   = Color3.fromRGB(0, 180, 255),
+        Stroke    = Color3.fromRGB(35, 45, 90),
+        Shine     = Color3.fromRGB(200, 225, 255),
+        Warn      = Color3.fromRGB(200, 140, 25),
+        Danger    = Color3.fromRGB(215, 65, 65),
+    },
+    Amethyst = {
+        GlassBg   = Color3.fromRGB(16, 12, 28),
+        GlassLeft = Color3.fromRGB(22, 16, 40),
+        GlassCard = Color3.fromRGB(34, 24, 60),
+        Accent    = Color3.fromRGB(160, 80, 230),
+        Accent2   = Color3.fromRGB(210, 130, 255),
+        Text      = Color3.fromRGB(240, 230, 255),
+        TextSoft  = Color3.fromRGB(155, 130, 195),
+        TextMuted = Color3.fromRGB(100, 80, 145),
+        Online    = Color3.fromRGB(100, 220, 150),
+        TrackOff  = Color3.fromRGB(50, 35, 85),
+        TrackOn   = Color3.fromRGB(160, 80, 230),
+        Stroke    = Color3.fromRGB(60, 40, 100),
+        Shine     = Color3.fromRGB(220, 190, 255),
+        Warn      = Color3.fromRGB(200, 140, 25),
+        Danger    = Color3.fromRGB(215, 65, 65),
+    },
 }
 
-local _parryExecuting = false
-local _parryLockTime = 0.15
-local LastParryTime = 0
-
-local Speed_Divisor_Multiplier = 1.1
-local function update_divisor()
-    Speed_Divisor_Multiplier = 0.7 + (System.__properties.__accuracy - 1) * (0.35/99)
-end
-update_divisor()
-
-local _cached_balls, _cached_balls_time = {}, 0
-function System.ball.get_all()
-    local now = tick()
-    if now - _cached_balls_time < 0.016 then return _cached_balls end
-    local t={}
-    local balls = workspace:FindFirstChild('Balls')
-    if balls then
-        for _,b in ipairs(balls:GetChildren()) do
-            if b:GetAttribute('realBall') then table.insert(t,b) end
-        end
+-- ─────────────────────────────────────────────────────────────
+-- HELPERS
+-- ─────────────────────────────────────────────────────────────
+local function Create(Class, Props)
+    local obj = Instance.new(Class)
+    for k, v in pairs(Props) do
+        if k ~= "Parent" then obj[k] = v end
     end
-    _cached_balls=t; _cached_balls_time=now
-    return t
-end
-function System.ball.get() return System.ball.get_all()[1] end
-
-function System.player.get_closest()
-    if not LocalPlayer.Character or not LocalPlayer.Character.PrimaryPart then return nil end
-    local best,result = math.huge, nil
-    for _,entity in ipairs(Alive:GetChildren()) do
-        if entity ~= LocalPlayer.Character and entity:FindFirstChild("HumanoidRootPart") then
-            local d = (entity.HumanoidRootPart.Position - LocalPlayer.Character.PrimaryPart.Position).Magnitude
-            if d < best then best=d; result=entity end
-        end
-    end
-    return result
+    if Props.Parent then obj.Parent = Props.Parent end
+    return obj
 end
 
-local function get_curve_cframe(mode)
-    local camera = workspace.CurrentCamera
-    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild('HumanoidRootPart')
-    if not root then return camera.CFrame end
-    local ok,mouse = pcall(function() return UserInputService:GetMouseLocation() end)
-    local mouseV2 = ok and Vector2.new(mouse.X,mouse.Y) or Vector2.new(camera.ViewportSize.X/2,camera.ViewportSize.Y/2)
-    local closest,closestDist = nil, math.huge
-    for _,p in ipairs(Alive:GetChildren()) do
-        if p ~= LocalPlayer.Character and p.PrimaryPart then
-            local sp,onScreen = camera:WorldToScreenPoint(p.PrimaryPart.Position)
-            if onScreen then
-                local d=(mouseV2-Vector2.new(sp.X,sp.Y)).Magnitude
-                if d<closestDist then closestDist=d; closest=p end
-            end
-        end
-    end
-    if mode=="Camera" then return camera.CFrame end
-    if mode=="Mouse" then return CFrame.new(root.Position, root.Position+camera:ScreenPointToRay(mouseV2.X,mouseV2.Y).Direction) end
-    if mode=="Players" then return closest and CFrame.new(root.Position,closest.PrimaryPart.Position) or camera.CFrame end
-    if mode=="Normal" then return CFrame.new(root.Position, root.Position+Vector3.new(0,0,-1)) end
-    if mode=="Up" then return CFrame.new(root.Position, root.Position+Vector3.new(0,1,0)) end
-    if mode=="Down" then return CFrame.new(root.Position, root.Position+Vector3.new(0,-1,0)) end
-    if mode=="Left" then return CFrame.new(root.Position, root.Position-camera.CFrame.RightVector) end
-    if mode=="Right" then return CFrame.new(root.Position, root.Position+camera.CFrame.RightVector) end
-    if mode=="Behind" then return CFrame.new(root.Position, root.Position-camera.CFrame.LookVector) end
-    if mode=="Random" then return CFrame.new(root.Position, root.Position+Vector3.new(math.random(-100,100),math.random(-100,100),math.random(-100,100)).Unit) end
-    if mode=="FrontLeft" then return CFrame.new(root.Position, root.Position+(camera.CFrame.LookVector-camera.CFrame.RightVector).Unit) end
-    if mode=="FrontRight" then return CFrame.new(root.Position, root.Position+(camera.CFrame.LookVector+camera.CFrame.RightVector).Unit) end
-    if mode=="BackLeft" then return CFrame.new(root.Position, root.Position+(-camera.CFrame.LookVector-camera.CFrame.RightVector).Unit) end
-    if mode=="BackRight" then return CFrame.new(root.Position, root.Position+(-camera.CFrame.LookVector+camera.CFrame.RightVector).Unit) end
-    if mode=="Spin" then
-        local angle=math.rad(tick()*360%360)
-        return CFrame.new(root.Position, root.Position+Vector3.new(math.cos(angle),0,math.sin(angle)))
-    end
-    if mode=="TargetHead" then return (closest and closest:FindFirstChild("Head")) and CFrame.new(root.Position,closest.Head.Position) or camera.CFrame end
-    if mode=="High" then return CFrame.new(root.Position, root.Position+camera.CFrame.UpVector*100) end
-    if mode=="RandomTarget" then
-        local candidates={}
-        for _,p in ipairs(Alive:GetChildren()) do
-            if p ~= LocalPlayer.Character and p.PrimaryPart then
-                local sp,onScreen=camera:WorldToScreenPoint(p.PrimaryPart.Position)
-                if onScreen then table.insert(candidates,p) end
-            end
-        end
-        if #candidates>0 then
-            local pick=candidates[math.random(1,#candidates)]
-            return CFrame.new(root.Position,pick.PrimaryPart.Position)
-        end
-        return camera.CFrame
-    end
-    return camera.CFrame
+local function Tween(obj, props, dur, style, dir)
+    local t = TweenService:Create(obj,
+        TweenInfo.new(dur or 0.5, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out), props)
+    t:Play(); return t
 end
 
-local _event_data_cache, _event_data_fire_count = {}, 0
-
-function System.parry.execute(isManual)
-    if not LocalPlayer.Character then return false end
-    local now = tick()
-    if isManual then
-        if (now - LastParryTime) < 0.05 then return false end
-    else
-        if _parryExecuting then return false end
-        if (now - LastParryTime) < _parryLockTime then return false end
-        _parryExecuting = true
-        task.delay(_parryLockTime, function() _parryExecuting = false end)
-    end
-    LastParryTime = now
-    if not System.__properties.__first_parry_done then
-        pcall(function()
-            for _,conn in pairs(getconnections(LocalPlayer.PlayerGui.Hotbar.Block.Activated)) do conn:Fire() end
-        end)
-        System.__properties.__first_parry_done = true
-        _parryExecuting = false
-        return true
-    end
-    local camera = workspace.CurrentCamera
-    local ok,mouse = pcall(function() return UserInputService:GetMouseLocation() end)
-    if not ok then _parryExecuting=false; return false end
-    _event_data_fire_count = _event_data_fire_count + 1
-    if _event_data_fire_count % 3 == 1 then
-        _event_data_cache = {}
-        if Alive then
-            for _,ent in ipairs(Alive:GetChildren()) do
-                if ent.PrimaryPart then
-                    local s,sp = pcall(function() return camera:WorldToScreenPoint(ent.PrimaryPart.Position) end)
-                    if s then _event_data_cache[ent.Name] = sp end
-                end
-            end
-        end
-    end
-    local cframe = get_curve_cframe(System.__properties.__curve_mode)
-    local fired = _PARRY_PATCH.fire(cframe, _event_data_cache, {mouse.X, mouse.Y})
-    if fired then
-        System.__properties.__parries = System.__properties.__parries + 1
-        task.delay(0.5, function()
-            if System.__properties.__parries > 0 then System.__properties.__parries = System.__properties.__parries - 1 end
-        end)
-        return true
-    end
-    return false
+local function Corner(parent, r)
+    return Create("UICorner", {Parent = parent, CornerRadius = UDim.new(0, r or 10)})
 end
 
-function System.parry.keypress()
-    if not LocalPlayer.Character then return end
-    pcall(function()
-        for _,conn in pairs(getconnections(LocalPlayer.PlayerGui.Hotbar.Block.Activated)) do conn:Fire() end
-    end)
+local function Stroke(parent, color, thickness, transparency)
+    return Create("UIStroke", {
+        Parent = parent, Color = color, Thickness = thickness or 1,
+        Transparency = transparency or 0,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    })
 end
 
-local Lerp_Radians = 0
-local Last_Warping = tick()
-local Curving = tick()
-local Previous_Velocity = {}
-
-function System.is_curved()
-    local ball = System.ball.get(); if not ball then return false end
-    local zoomies = ball:FindFirstChild('zoomies'); if not zoomies then return false end
-    local velocity = zoomies.VectorVelocity
-    local speed = velocity.Magnitude; if speed < 1 then return false end
-    local ball_dir = velocity.Unit
-    local char = LocalPlayer.Character; if not char or not char.PrimaryPart then return false end
-    local pos = char.PrimaryPart.Position
-    local direction = (pos - ball.Position).Unit
-    local dot = direction:Dot(ball_dir)
-    local ping = getgenv()._ZX_PingCache
-    local distance = (pos - ball.Position).Magnitude
-    local reach_time = distance / speed - ping / 1000
-    local speed_threshold = math.min(speed/100, 40)
-    local ball_distance_threshold = 15 - math.min(distance/1000, 15) + speed_threshold
-    table.insert(Previous_Velocity, velocity)
-    if #Previous_Velocity > 4 then table.remove(Previous_Velocity, 1) end
-    if ball:FindFirstChild('AeroDynamicSlashVFX') then
-        if ball.AeroDynamicSlashVFX then Debris:AddItem(ball.AeroDynamicSlashVFX, 0) end
-        Curving = tick()
-    end
-    if Runtime and Runtime:FindFirstChild('Tornado') then
-        if (tick()-Curving) < (Runtime.Tornado:GetAttribute("TornadoTime") or 1)+0.314159 then return true end
-    end
-    local enough_speed = speed > 160
-    if enough_speed and reach_time > ping/10 + 0.03 then
-        if speed < 300 then ball_distance_threshold = math.max(ball_distance_threshold-15, 15)
-        elseif speed < 600 then ball_distance_threshold = math.max(ball_distance_threshold-17, 17)
-        elseif speed < 1000 then ball_distance_threshold = math.max(ball_distance_threshold-19, 19)
-        else ball_distance_threshold = math.max(ball_distance_threshold-20, 20) end
-    end
-    if distance < ball_distance_threshold then return false end
-    local b = reach_time + 0.03
-    local curve_divisor = 1.2
-    if speed >= 300 and speed < 450 then curve_divisor=1.21
-    elseif speed >= 450 and speed < 600 then curve_divisor=1.335
-    elseif speed >= 600 then curve_divisor=1.5 end
-    if (tick()-Curving) < (b/curve_divisor) then return true end
-    local dot_threshold = 0 - ping/1000
-    local direction_difference = ball_dir - velocity.Unit
-    local direction_similarity = direction:Dot(direction_difference.Unit)
-    if dot - direction_similarity < dot_threshold then return true end
-    local clamped_dot = math.clamp(dot, -1, 1)
-    local radians = math.deg(math.asin(clamped_dot))
-    Lerp_Radians = Lerp_Radians + (radians - Lerp_Radians) * 0.8
-    local lerp_threshold = speed < 300 and 0.02 or 0.018
-    local warp_divisor = speed < 300 and 1.19 or 1.5
-    if Lerp_Radians < lerp_threshold then Last_Warping = tick() end
-    if (tick()-Last_Warping) < (b/warp_divisor) then return true end
-    if #Previous_Velocity == 4 then
-        for i=1,2 do
-            local intended = (ball_dir - Previous_Velocity[i].Unit).Unit
-            local intended_dot = direction:Dot(intended)
-            if dot - intended_dot < dot_threshold then return true end
-        end
-    end
-    local horizDir = Vector3.new(pos.X-ball.Position.X, 0, pos.Z-ball.Position.Z)
-    if horizDir.Magnitude > 0 then horizDir = horizDir.Unit end
-    local horizBallDir = Vector3.new(ball_dir.X, 0, ball_dir.Z)
-    if horizBallDir.Magnitude > 0 then
-        horizBallDir = horizBallDir.Unit
-        local backwardsAngle = math.deg(math.acos(math.clamp((-horizDir):Dot(horizBallDir), -1, 1)))
-        if backwardsAngle < 60 then return true end
-    end
-    return dot < dot_threshold
+local function Ripple(parent, x, y)
+    local r = Create("Frame", {
+        Parent = parent,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0, x, 0, y),
+        Size = UDim2.new(0, 0, 0, 0),
+        BackgroundColor3 = Color3.new(1, 1, 1),
+        BackgroundTransparency = 0.88,
+        BorderSizePixel = 0,
+        ZIndex = 40,
+    })
+    Corner(r, 300)
+    local d = math.max(parent.AbsoluteSize.X, parent.AbsoluteSize.Y) * 1.8
+    Tween(r, {Size = UDim2.new(0, d, 0, d), BackgroundTransparency = 1}, 0.55, Enum.EasingStyle.Quad)
+    task.delay(0.6, function() if r and r.Parent then r:Destroy() end end)
 end
 
--- GRAB PARRY
-ReplicatedStorage.Remotes.ParrySuccessAll.OnClientEvent:Connect(function(_, root)
-    if not System.__properties.__grab_parry_enabled then return end
-    if root.Parent and root.Parent ~= LocalPlayer.Character then
-        if not Alive or root.Parent.Parent ~= Alive then return end
-    end
-    if _parryExecuting then return end
-    if (tick()-LastParryTime) < _parryLockTime then return end
-    local closest = System.player.get_closest()
-    local ball = System.ball.get()
-    if not ball or not closest then return end
-    local target_distance = (LocalPlayer.Character.PrimaryPart.Position - closest.PrimaryPart.Position).Magnitude
-    local distance = (LocalPlayer.Character.PrimaryPart.Position - ball.Position).Magnitude
-    local direction = (LocalPlayer.Character.PrimaryPart.Position - ball.Position).Unit
-    local dot = direction:Dot(ball.AssemblyLinearVelocity.Unit)
-    if System.is_curved() and target_distance < 15 and distance < 15 and dot > 0 then
-        System.parry.execute()
-    end
-end)
-
-ReplicatedStorage.Remotes.ParrySuccessAll.OnClientEvent:Connect(function(a, b)
-    local primary = LocalPlayer.Character and LocalPlayer.Character.PrimaryPart
-    local ball = System.ball.get()
-    if not ball or not primary then return end
-    local zoomies = ball:FindFirstChild('zoomies'); if not zoomies then return end
-    local speed = zoomies.VectorVelocity.Magnitude
-    local distance = (primary.Position - ball.Position).Magnitude
-    local ping = getgenv()._ZX_PingCache
-    local speed_threshold = math.min(speed/100, 40)
-    local reach_time = distance/speed - ping/1000
-    local ball_distance_threshold = 15 - math.min(distance/1000, 15) + speed_threshold
-    if speed > 100 and reach_time > ping/10 then
-        ball_distance_threshold = math.max(ball_distance_threshold-15, 15)
-    end
-    if b ~= primary and distance > ball_distance_threshold then Curving = tick() end
-end)
-
--- AUTO PARRY
-local _lastParriedBallTarget = ""
-
-function System.autoparry.start()
-    if System.__properties.__connections.__autoparry then
-        System.__properties.__connections.__autoparry:Disconnect()
-    end
-    _lastParriedBallTarget = ""
-    System.__properties.__connections.__autoparry = RunService.PreSimulation:Connect(function()
-        if not System.__properties.__autoparry_enabled then return end
-        if not LocalPlayer.Character or not LocalPlayer.Character.PrimaryPart then return end
-        local balls = System.ball.get_all()
-        local one_ball = System.ball.get()
-        if not one_ball then return end
-        for _, ball in ipairs(balls) do
-            local zoomies = ball:FindFirstChild('zoomies'); if not zoomies then continue end
-            ball:GetAttributeChangedSignal('target'):Once(function()
-                System.__properties.__parried = false
-                _lastParriedBallTarget = ""
-            end)
-            if System.__properties.__parried then continue end
-            local ball_target = ball:GetAttribute('target')
-            local vel = zoomies.VectorVelocity
-            local dist = (LocalPlayer.Character.PrimaryPart.Position - ball.Position).Magnitude
-            local ping = getgenv()._ZX_PingCache / 10
-            local ping_thresh = math.clamp(ping/10, 5, 17)
-            local speed = vel.Magnitude
-            local skip = false
-            if Settings.InfinityDetection and AbilityFlags.InfinityBall then skip=true end
-            if Settings.DeathSlashDetection and AbilityFlags.DeathSlashBall then skip=true end
-            if Settings.TimeHoleDetection and AbilityFlags.TimeHole then skip=true end
-            if Settings.SlashesofFuryDetection and AbilityFlags.SlashesofFury then skip=true end
-            if Settings.ForcefieldDetection and AbilityFlags.Forcefield then skip=true end
-            if Settings.PhantomDetection and AbilityFlags.Phantom then skip=true end
-            if Settings.SingularityDetection and AbilityFlags.Singularity then skip=true end
-            if Settings.DribbleDetection and AbilityFlags.Dribble then skip=true end
-            if Settings.PullDetection and AbilityFlags.Pull then skip=true end
-            if Settings.PulseDetection and AbilityFlags.Pulse then skip=true end
-            if Settings.AbilityActiveDetection and AbilityFlags.AbilityActive then skip=true end
-            if Settings.TornadoDetection and AbilityFlags.Tornado then skip=true end
-            if Settings.HellHookDetection and AbilityFlags.HellHook then skip=true end
-            if skip then continue end
-            local capped_speed = math.min(math.max(speed-9.5, 0), 650)
-            local speed_divisor_base = 2.4 + capped_speed * 0.002
-            local effective_multiplier = Speed_Divisor_Multiplier
-            if System.__properties.__random_accuracy then
-                if speed < 200 then effective_multiplier = 0.7+(math.random(40,100)-1)*(0.35/99)
-                else effective_multiplier = 0.7+(math.random(1,100)-1)*(0.35/99) end
-            end
-            local parry_acc = ping_thresh + math.max(speed/(speed_divisor_base*effective_multiplier), 9.5)
-            if Settings.AntiCurve and one_ball:GetAttribute('target')==LocalPlayer.Name then
-                if System.is_curved() then continue end
-            end
-            if LocalPlayer.Character.PrimaryPart:FindFirstChild('SingularityCape') then continue end
-            if ball_target == LocalPlayer.Name and dist <= parry_acc then
-                local fireKey = tostring(ball).."|"..(ball_target or "")
-                if _lastParriedBallTarget == fireKey then continue end
-                _lastParriedBallTarget = fireKey
-                if Settings.ParryMode == "Keypress" then
-                    System.parry.keypress()
-                else
-                    System.parry.execute()
-                end
-                System.__properties.__parried = true
-                task.delay(0.3, function()
-                    System.__properties.__parried = false
-                end)
-            end
-        end
-    end)
-end
-
-function System.autoparry.stop()
-    if System.__properties.__connections.__autoparry then
-        System.__properties.__connections.__autoparry:Disconnect()
-        System.__properties.__connections.__autoparry = nil
-    end
-    System.__properties.__parried = false
-    _lastParriedBallTarget = ""
-end
-
--- MANUAL SPAM
-local MSAccumulator = 0
-function System.manual_spam.start()
-    if System.__properties.__connections.__manual_spam then
-        System.__properties.__connections.__manual_spam:Disconnect()
-    end
-    System.__properties.__manual_spam_enabled = true
-    MSAccumulator = 0
-    System.__properties.__connections.__manual_spam = RunService.Heartbeat:Connect(function(dt)
-        if not System.__properties.__manual_spam_enabled then return end
-        if not LocalPlayer.Character then return end
-        MSAccumulator = MSAccumulator + dt
-        local interval = 1 / math.max(1, Settings.ManualSpamCPS)
-        if MSAccumulator < interval then return end
-        MSAccumulator = 0
-        System.parry.execute(true)
-    end)
-end
-function System.manual_spam.stop()
-    System.__properties.__manual_spam_enabled = false
-    if System.__properties.__connections.__manual_spam then
-        System.__properties.__connections.__manual_spam:Disconnect()
-        System.__properties.__connections.__manual_spam = nil
-    end
-end
-
--- AUTO SPAM
-local AutoSpamState = { lastFireTime=0 }
-function System.auto_spam.start()
-    if System.__properties.__connections.__auto_spam then
-        System.__properties.__connections.__auto_spam:Disconnect()
-    end
-    System.__properties.__auto_spam_enabled = true
-    System.__properties.__connections.__auto_spam = RunService.Heartbeat:Connect(function()
-        if not System.__properties.__auto_spam_enabled then return end
-        local ball = System.ball.get(); if not ball then return end
-        local zoomies = ball:FindFirstChild('zoomies'); if not zoomies then return end
-        local vel = zoomies.VectorVelocity
-        local speed = vel.Magnitude; if speed < 30 then return end
-        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
-        local dist = (hrp.Position - ball.Position).Magnitude
-        local target = ball:GetAttribute('target')
-        local dot = (hrp.Position - ball.Position).Unit:Dot(vel.Unit)
-        local maxDist
-        if Settings.AutoSpamModeType == "Distance" then
-            maxDist = math.clamp(Settings.DistanceMultiplier*100, 5, 28)
-        else
-            local speedFactor = math.clamp(speed/150, 0.5, 2.5)
-            local baseDist = Settings.DistanceMultiplier*100
-            maxDist = speed > 400 and math.clamp(baseDist*speedFactor, 8, 35) or baseDist
-        end
-        if target == LocalPlayer.Name and dist <= maxDist and dot > 0.3 then
-            if (tick()-AutoSpamState.lastFireTime) >= 0.05 then
-                AutoSpamState.lastFireTime = tick()
-                if Settings.AutoSpamMode == "Keypress" then System.parry.keypress()
-                else System.parry.execute(true) end
-            end
-        end
-    end)
-end
-function System.auto_spam.stop()
-    System.__properties.__auto_spam_enabled = false
-    if System.__properties.__connections.__auto_spam then
-        System.__properties.__connections.__auto_spam:Disconnect()
-        System.__properties.__connections.__auto_spam = nil
-    end
-end
-
--- ===== SKIN CHANGER =====
-getgenv().SkinChangerEnabled = false
-getgenv().SwordModel = ""
-getgenv().SwordAnimation = ""
-getgenv().SwordFX = ""
-local swordInstances = nil
-local skinChangerController = nil
-
-local function getSwordModule()
-    if swordInstances then return swordInstances end
-    pcall(function()
-        local shared = ReplicatedStorage:FindFirstChild("Shared"); if not shared then return end
-        local instances = shared:FindFirstChild("ReplicatedInstances"); if not instances then return end
-        local swords = instances:FindFirstChild("Swords"); if not swords then return end
-        swordInstances = require(swords)
-    end)
-    return swordInstances
-end
-
-local function getSwordsController()
-    if skinChangerController then return skinChangerController end
-    local controllers = ReplicatedStorage:FindFirstChild("Controllers")
-    if controllers then
-        for _,child in ipairs(controllers:GetChildren()) do
-            if child.Name:match("SwordsController") then
-                local ok,module = pcall(require, child)
-                if ok and type(module)=="table" then skinChangerController=module; return module end
-            end
-        end
-    end
-    return skinChangerController
-end
-
-local function setSword()
-    if not getgenv().SkinChangerEnabled then return end
-    if not LocalPlayer.Character then return end
-    if getgenv().SwordModel == "" then return end
-    local mod = getSwordModule(); if not mod then return end
-    pcall(function()
-        local f = rawget(mod, "EquipSwordTo")
-        if type(f)=="function" then
-            local ups = getupvalues(f)
-            for i=1,#ups do
-                if type(ups[i])=="boolean" then setupvalue(f,i,false); break end
-            end
-        end
-    end)
-    pcall(function() mod:EquipSwordTo(LocalPlayer.Character, getgenv().SwordModel) end)
-    task.spawn(function()
-        local controller = getSwordsController()
-        if controller then
+local function ClickRipple(el)
+    el.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
             pcall(function()
-                if controller.SetSword then
-                    controller:SetSword(getgenv().SwordAnimation ~= "" and getgenv().SwordAnimation or getgenv().SwordModel)
-                end
+                Ripple(el, input.Position.X - el.AbsolutePosition.X, input.Position.Y - el.AbsolutePosition.Y)
             end)
         end
     end)
-    pcall(function()
-        local remote = ReplicatedStorage.Remotes:FindFirstChild("FireSwordInfo")
-        if remote then
-            remote:FireServer(getgenv().SwordFX ~= "" and getgenv().SwordFX or getgenv().SwordModel)
+end
+
+-- ─────────────────────────────────────────────────────────────
+-- NEXUI CLASS
+-- ─────────────────────────────────────────────────────────────
+local NexUI = {}
+NexUI.__index = NexUI
+NexUI.Themes = Themes
+
+function NexUI.new(title, options)
+    options = options or {}
+    local self = setmetatable({}, NexUI)
+
+    self._theme       = Themes[options.theme or "Dark"] or Themes.Dark
+    self._themeReg    = {}
+    self._keybinds    = {}
+    self._tabs        = {}
+    self._currentTab  = nil
+    self._isOpen      = true
+    self._flags       = {}
+    self._stars       = {}
+    self._W           = (options.size and options.size[1]) or 740
+    self._H           = (options.size and options.size[2]) or 580
+    self._accent      = self._theme.Accent
+    self._accent2     = self._theme.Accent2
+    self._accentLinks = {}
+    self._rainbowMode = false
+    self._toastCount  = 0
+
+    -- Root GUI
+    self._gui = Create("ScreenGui", {
+        Name             = "NexUI_" .. title,
+        Parent           = CoreGui,
+        ResetOnSpawn     = false,
+        ZIndexBehavior   = Enum.ZIndexBehavior.Sibling,
+        DisplayOrder     = 999,
+        IgnoreGuiInset   = true,
+    })
+
+    self._blur = Create("BlurEffect", {Size = 0, Parent = Lighting})
+
+    -- Layers
+    self:_buildToastLayer()
+    self:_buildWatermark(title)
+    self:_buildMainWindow(title, options.subtitle or "")
+    self:_buildAtmosphere()
+    self:_buildInitSequence(title)
+
+    -- Keybind input
+    local menuKey = options.menuKey or Enum.KeyCode.K
+    self._menuKey = menuKey
+    self:Bind(menuKey, "$$menu$$", function() self:Toggle() end)
+
+    self._inputConn = UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe then return end
+        if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+        local entry = self._keybinds[input.KeyCode]
+        if entry then
+            for _, cb in pairs(entry.callbacks) do task.spawn(cb) end
         end
     end)
+
+    _lib._cleanup = function() self:Destroy() end
+    return self
 end
 
-local function startSkinMonitor()
-    if System.__properties.__connections.__skin_monitor then return end
-    System.__properties.__connections.__skin_monitor = RunService.Heartbeat:Connect(function()
-        if not getgenv().SkinChangerEnabled then return end
-        local char = LocalPlayer.Character; if not char then return end
-        local currentSword = LocalPlayer:GetAttribute("CurrentlyEquippedSword")
-        local targetSword = getgenv().SwordModel
-        if currentSword ~= targetSword and targetSword ~= "" then setSword() end
-    end)
+-- ─── KEYBIND ENGINE ──────────────────────────────────────────
+function NexUI:Bind(key, id, fn)
+    if not self._keybinds[key] then self._keybinds[key] = {callbacks = {}} end
+    self._keybinds[key].callbacks[id] = fn
 end
 
-getgenv().EnableSkinChanger = function() getgenv().SkinChangerEnabled=true; setSword(); startSkinMonitor() end
-getgenv().DisableSkinChanger = function()
-    getgenv().SkinChangerEnabled = false
-    if System.__properties.__connections.__skin_monitor then
-        System.__properties.__connections.__skin_monitor:Disconnect()
-        System.__properties.__connections.__skin_monitor = nil
+function NexUI:Unbind(key, id)
+    local entry = self._keybinds[key]
+    if entry then entry.callbacks[id] = nil end
+end
+
+-- ─── THEME REGISTRY ──────────────────────────────────────────
+function NexUI:_reg(obj, prop, key)
+    table.insert(self._themeReg, {Object = obj, Property = prop, Key = key})
+end
+
+function NexUI:_regAccent(obj, prop, useAccent2)
+    table.insert(self._accentLinks, {o = obj, p = prop, alt = useAccent2 and true or false})
+end
+
+function NexUI:_applyAccent(c1, c2)
+    self._accent  = c1
+    self._accent2 = c2 or c1
+    for _, l in ipairs(self._accentLinks) do
+        pcall(function()
+            local val = l.alt and self._accent2 or self._accent
+            Tween(l.o, {[l.p] = val}, 0.35)
+        end)
     end
 end
-getgenv().SetSword = function(model, animation, fx)
-    getgenv().SwordModel = model or ""
-    getgenv().SwordAnimation = animation or model or ""
-    getgenv().SwordFX = fx or model or ""
-    if getgenv().SkinChangerEnabled then setSword() end
+
+function NexUI:SetTheme(name)
+    local new = Themes[name]
+    if not new then return end
+    self._theme = new
+    for _, e in ipairs(self._themeReg) do
+        if e.Object and e.Object.Parent then
+            Tween(e.Object, {[e.Property] = new[e.Key]}, 0.5)
+        end
+    end
+    self:_applyAccent(new.Accent, new.Accent2)
+    self:Toast("Theme", name .. " applied", 2)
 end
 
--- ===== FAKE BODY =====
-local KORBLOX_MESH = "rbxassetid://101851696"
-local KORBLOX_TEX = "rbxassetid://101851254"
-local HEADLESS_MESH = "rbxassetid://134082579"
+-- ─── WATERMARK ───────────────────────────────────────────────
+function NexUI:_buildWatermark(title)
+    local T = self._theme
+    local wmGui = Create("ScreenGui", {
+        Name = "NexUI_WM_" .. title, Parent = CoreGui,
+        ResetOnSpawn = false, IgnoreGuiInset = true,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 100000,
+    })
+    self._wmGui = wmGui
 
-local function applyFakeBody(char)
-    if not System.__properties.__fake_body_enabled then return end
-    if not char then return end
+    local card = Create("Frame", {
+        Parent = wmGui, AnchorPoint = Vector2.new(0, 0),
+        Position = UDim2.new(0, 8, 0, 6), Size = UDim2.new(0, 240, 0, 30),
+        BackgroundColor3 = T.GlassBg, BackgroundTransparency = 0.18,
+        BorderSizePixel = 0, ZIndex = 100,
+    })
+    self:_reg(card, "BackgroundColor3", "GlassBg")
+    Corner(card, 10)
+    local wStroke = Stroke(card, T.Stroke, 1, 0.5)
+    self:_reg(wStroke, "Color", "Stroke")
+
+    -- Pulse dot
+    local dot = Create("Frame", {
+        Parent = card, BackgroundColor3 = T.Online,
+        BorderSizePixel = 0, Position = UDim2.new(0, 10, 0.5, -3),
+        Size = UDim2.new(0, 6, 0, 6), ZIndex = 103,
+    })
+    Corner(dot, 300)
+    self:_reg(dot, "BackgroundColor3", "Online")
     task.spawn(function()
-        local rleg = char:FindFirstChild("Right Leg") or char:WaitForChild("RightLowerLeg",5)
-        if rleg then
-            local fake = char:FindFirstChild("FakeKorbloxLeg"); if fake then fake:Destroy() end
-            local p = Instance.new("Part")
-            p.Name="FakeKorbloxLeg"; p.Size=rleg.Size; p.CFrame=rleg.CFrame
-            p.Anchored=false; p.CanCollide=false; p.BrickColor=BrickColor.new("Really black")
-            local m = Instance.new("SpecialMesh"); m.MeshType=Enum.MeshType.FileMesh
-            m.MeshId=KORBLOX_MESH; m.TextureId=KORBLOX_TEX; m.Parent=p
-            p.Parent=char
-            local w = Instance.new("WeldConstraint"); w.Part0=rleg; w.Part1=p; w.Parent=rleg
-            rleg.Transparency=1
+        while dot and dot.Parent do
+            Tween(dot, {BackgroundTransparency = 0.5, Size = UDim2.new(0, 8, 0, 8), Position = UDim2.new(0, 9, 0.5, -4)}, 0.7, Enum.EasingStyle.Sine)
+            task.wait(0.7)
+            Tween(dot, {BackgroundTransparency = 0, Size = UDim2.new(0, 6, 0, 6), Position = UDim2.new(0, 10, 0.5, -3)}, 0.7, Enum.EasingStyle.Sine)
+            task.wait(0.7)
         end
-        local head = char:FindFirstChild("Head")
-        if head then
-            for _,v in ipairs(head:GetChildren()) do if v:IsA("Decal") then v:Destroy() end end
-            local m = Instance.new("SpecialMesh"); m.MeshType=Enum.MeshType.FileMesh
-            m.MeshId=HEADLESS_MESH; m.Scale=Vector3.new(1.25,1.25,1.25); m.Parent=head
-            head.Transparency=0.1; head.BrickColor=BrickColor.new("Really black")
+    end)
+
+    local logo = Create("TextLabel", {
+        Parent = card, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 22, 0, 0), Size = UDim2.new(0, 72, 1, 0),
+        Font = Enum.Font.GothamBold, Text = title,
+        TextColor3 = T.Text, TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 102,
+    })
+    self:_reg(logo, "TextColor3", "Text")
+
+    local sep = Create("TextLabel", {
+        Parent = card, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 94, 0, 0), Size = UDim2.new(0, 10, 1, 0),
+        Font = Enum.Font.Gotham, Text = "|",
+        TextColor3 = T.TextMuted, TextSize = 12, ZIndex = 102,
+    })
+    self:_reg(sep, "TextColor3", "TextMuted")
+
+    local stats = Create("TextLabel", {
+        Parent = card, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 104, 0, 0), Size = UDim2.new(1, -112, 1, 0),
+        Font = Enum.Font.Gotham, Text = "--- ms | --- FPS",
+        TextColor3 = T.TextSoft, TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 102,
+    })
+    self:_reg(stats, "TextColor3", "TextSoft")
+
+    task.spawn(function()
+        local fps, frames, last = 0, 0, tick()
+        while wmGui and wmGui.Parent do
+            RunService.RenderStepped:Wait()
+            frames = frames + 1
+            local now = tick()
+            if now - last >= 1 then
+                fps = frames; frames = 0; last = now
+                local ok, val = pcall(function() return Stats.PerformanceStats.Ping:GetValue() end)
+                stats.Text = (ok and math.floor(val) or 0) .. " ms | " .. fps .. " FPS"
+            end
         end
     end)
 end
 
-LocalPlayer.CharacterAdded:Connect(function(char)
-    task.wait(2)
-    swordInstances=nil; skinChangerController=nil
-    if getgenv().SkinChangerEnabled then task.wait(0.5); setSword() end
-    if System.__properties.__fake_body_enabled then task.wait(0.5); applyFakeBody(char) end
-end)
+-- ─── TOAST LAYER (UwU-style) ──────────────────────────────────
+function NexUI:_buildToastLayer()
+    local toastGui = Create("ScreenGui", {
+        Name = "NexUI_Toast", Parent = CoreGui,
+        ResetOnSpawn = false, IgnoreGuiInset = true,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 99999,
+    })
+    self._toastGui = toastGui
 
--- ===== BALL STYLING =====
-local BallStyling = { Enabled=false, Connections={} }
+    local holder = Create("Frame", {
+        Parent = toastGui, BackgroundTransparency = 1,
+        AnchorPoint = Vector2.new(1, 1),
+        Position = UDim2.new(1, -16, 1, -16),
+        Size = UDim2.new(0, 330, 1, -32),
+        ClipsDescendants = true, ZIndex = 200,
+    })
+    self._toastHolder = holder
 
-function BallStyling:StyleBall(ball)
-    if not ball:GetAttribute("realBall") then return end
-    for _,child in pairs(ball:GetChildren()) do
-        if child:IsA("SpecialMesh") or child:IsA("BlockMesh") or child:IsA("Decal") or child:IsA("Texture") then child:Destroy() end
+    Create("UIListLayout", {
+        Parent = holder, Padding = UDim.new(0, 8),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        HorizontalAlignment = Enum.HorizontalAlignment.Right,
+        VerticalAlignment = Enum.VerticalAlignment.Bottom,
+        FillDirection = Enum.FillDirection.Vertical,
+    })
+end
+
+function NexUI:Toast(title, body, duration, color)
+    duration = duration or 3
+    local T  = self._theme
+    local col = color or self._accent
+    self._toastCount = self._toastCount + 1
+
+    local wrapper = Create("Frame", {
+        Parent = self._toastHolder, BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 52), LayoutOrder = self._toastCount,
+        ClipsDescendants = true,
+    })
+
+    local pill = Create("Frame", {
+        Parent = wrapper,
+        BackgroundColor3 = T.GlassCard, BackgroundTransparency = 0.04,
+        BorderSizePixel = 0, Size = UDim2.new(1, 0, 1, 0),
+        Position = UDim2.new(0, 340, 0, 0),
+        ClipsDescendants = true, ZIndex = 210,
+    })
+    Corner(pill, 14)
+    Stroke(pill, T.Stroke, 1, 0.4)
+
+    -- Left accent stripe
+    local stripe = Create("Frame", {
+        Parent = pill, BackgroundColor3 = col,
+        BorderSizePixel = 0, Position = UDim2.new(0, 0, 0, 0),
+        Size = UDim2.new(0, 3, 1, 0), ZIndex = 211,
+    })
+    Corner(stripe, 14)
+
+    -- Icon circle
+    local ic = Create("Frame", {
+        Parent = pill, BackgroundColor3 = col,
+        BorderSizePixel = 0, Position = UDim2.new(0, 12, 0.5, -12),
+        Size = UDim2.new(0, 24, 0, 24), ZIndex = 212,
+    })
+    Corner(ic, 300)
+    Create("TextLabel", {
+        Parent = ic, Size = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1,
+        Text = tostring(title):sub(1, 1):upper(),
+        Font = Enum.Font.GothamBlack, TextSize = 12,
+        TextColor3 = Color3.new(1, 1, 1), ZIndex = 213,
+    })
+
+    local titleLbl = Create("TextLabel", {
+        Parent = pill, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 44, 0, 9), Size = UDim2.new(1, -70, 0, 15),
+        Font = Enum.Font.GothamBold, Text = title,
+        TextColor3 = T.Text, TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 212,
+    })
+
+    local bodyLbl = Create("TextLabel", {
+        Parent = pill, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 44, 0, 27), Size = UDim2.new(1, -70, 0, 13),
+        Font = Enum.Font.Gotham, Text = body,
+        TextColor3 = T.TextSoft, TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 212,
+    })
+
+    -- Close button
+    local closeBtn = Create("TextButton", {
+        Parent = pill, BackgroundTransparency = 1,
+        Position = UDim2.new(1, -24, 0, 0), Size = UDim2.new(0, 24, 1, 0),
+        Font = Enum.Font.GothamBold, Text = "×",
+        TextColor3 = T.TextMuted, TextSize = 16,
+        AutoButtonColor = false, ZIndex = 213,
+    })
+
+    -- Progress bar
+    local pgBg = Create("Frame", {
+        Parent = pill, BackgroundColor3 = T.TrackOff,
+        BackgroundTransparency = 0.5, BorderSizePixel = 0,
+        Position = UDim2.new(0, 4, 1, -3), Size = UDim2.new(1, -8, 0, 2), ZIndex = 213,
+    })
+    Corner(pgBg, 300)
+    local pgFill = Create("Frame", {
+        Parent = pgBg, BackgroundColor3 = col,
+        BorderSizePixel = 0, Size = UDim2.new(1, 0, 1, 0), ZIndex = 214,
+    })
+    Corner(pgFill, 300)
+
+    Tween(pill, {Position = UDim2.new(0, 0, 0, 0)}, 0.4, Enum.EasingStyle.Quint)
+    Tween(pgFill, {Size = UDim2.new(0, 0, 1, 0)}, duration, Enum.EasingStyle.Linear)
+
+    local dismissed = false
+    local function dismiss()
+        if dismissed then return end; dismissed = true
+        Tween(pill, {Position = UDim2.new(0, 340, 0, 0), BackgroundTransparency = 1}, 0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        Tween(titleLbl, {TextTransparency = 1}, 0.2)
+        Tween(bodyLbl,  {TextTransparency = 1}, 0.2)
+        task.delay(0.3, function()
+            Tween(wrapper, {Size = UDim2.new(1, 0, 0, 0)}, 0.22, Enum.EasingStyle.Quint)
+            task.delay(0.25, function()
+                if wrapper and wrapper.Parent then wrapper:Destroy() end
+            end)
+        end)
     end
-    local bm = Instance.new("BlockMesh"); bm.Parent=ball
-    ball.Material = Enum.Material.Neon
-    for _,n in ipairs({"RainbowTrail","RainbowAtt0","RainbowAtt1"}) do
-        local e=ball:FindFirstChild(n); if e then e:Destroy() end
-    end
-    local att0=Instance.new("Attachment"); att0.Name="RainbowAtt0"; att0.Position=Vector3.new(0,0,-0.6); att0.Parent=ball
-    local att1=Instance.new("Attachment"); att1.Name="RainbowAtt1"; att1.Position=Vector3.new(0,0,0.6); att1.Parent=ball
-    local trail=Instance.new("Trail"); trail.Name="RainbowTrail"
-    trail.Attachment0=att0; trail.Attachment1=att1; trail.Lifetime=1.0
-    trail.MinLength=0.01; trail.FaceCamera=true; trail.LightEmission=0.8; trail.LightInfluence=0.3
-    trail.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0),NumberSequenceKeypoint.new(0.5,0.3),NumberSequenceKeypoint.new(1,1)})
-    trail.WidthScale=NumberSequence.new({NumberSequenceKeypoint.new(0,1.5),NumberSequenceKeypoint.new(0.6,0.8),NumberSequenceKeypoint.new(1,0)})
-    trail.Parent=ball
-    local hueOffset=math.random()*10
-    local conn
-    conn=RunService.RenderStepped:Connect(function()
-        if not ball or not ball.Parent then conn:Disconnect(); return end
-        local hue=((tick()+hueOffset)%4)/4
-        local c=Color3.fromHSV(hue,1,1); ball.Color=c
-        trail.Color=ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.fromHSV(hue,1,1)),
-            ColorSequenceKeypoint.new(0.25, Color3.fromHSV((hue+0.15)%1,1,1)),
-            ColorSequenceKeypoint.new(0.5, Color3.fromHSV((hue+0.30)%1,1,1)),
-            ColorSequenceKeypoint.new(0.75, Color3.fromHSV((hue+0.45)%1,1,1)),
-            ColorSequenceKeypoint.new(1, Color3.fromHSV((hue+0.60)%1,1,1)),
+
+    closeBtn.MouseButton1Click:Connect(dismiss)
+    pill.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or
+           i.UserInputType == Enum.UserInputType.Touch then dismiss() end
+    end)
+    task.delay(duration, dismiss)
+end
+
+-- ─── ATMOSPHERE (UwU orbs + cursor trail + shooting stars) ────
+function NexUI:_buildAtmosphere()
+    if not self._win then return end
+    local T = self._theme
+
+    -- Depth layers
+    local depthFar  = Create("Frame", {Parent = self._win, Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, ZIndex = 2})
+    local depthNear = Create("Frame", {Parent = self._win, Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, ZIndex = 2})
+
+    local function MakeGlow(parent, x, y, size, baseT)
+        local holder = Create("Frame", {
+            Parent = parent,
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0, x, 0, y),
+            Size = UDim2.new(0, size, 0, size),
+            BackgroundTransparency = 1,
         })
-        for _,obj in pairs(ball:GetDescendants()) do
-            if obj:IsA("Highlight") then obj.FillColor=c; obj.OutlineColor=c
-            elseif obj:IsA("ParticleEmitter") then obj.Color=ColorSequence.new(c) end
-        end
-    end)
-    table.insert(self.Connections, conn)
-end
-
-function BallStyling:ScanExisting()
-    for _,folder in ipairs({"Balls","TrainingBalls"}) do
-        local f=workspace:FindFirstChild(folder)
-        if f then for _,ball in pairs(f:GetChildren()) do task.spawn(function() self:StyleBall(ball) end) end end
+        local c1 = Create("Frame", {
+            Parent = holder, AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(1, 0, 1, 0),
+            BackgroundColor3 = T.Accent, BackgroundTransparency = baseT, BorderSizePixel = 0,
+        })
+        Corner(c1, 300)
+        local c2 = Create("Frame", {
+            Parent = holder, AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0.55, 0, 0.55, 0),
+            BackgroundColor3 = T.Accent2, BackgroundTransparency = math.max(baseT - 0.06, 0), BorderSizePixel = 0,
+        })
+        Corner(c2, 300)
+        self:_reg(c1, "BackgroundColor3", "Accent")
+        self:_reg(c2, "BackgroundColor3", "Accent2")
+        return holder
     end
-end
 
-function BallStyling:MonitorSpawn()
-    for _,folder in ipairs({"Balls","TrainingBalls"}) do
-        local f=workspace:FindFirstChild(folder)
-        if f then
-            f.ChildAdded:Connect(function(c) task.spawn(function() self:StyleBall(c) end) end)
-        end
+    local function Drift(el, x1, y1, x2, y2, dur)
+        task.spawn(function()
+            while el and el.Parent do
+                local t1 = TweenService:Create(el, TweenInfo.new(dur, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Position = UDim2.new(0, x1, 0, y1)})
+                t1:Play(); t1.Completed:Wait()
+                if not (el and el.Parent) then break end
+                local t2 = TweenService:Create(el, TweenInfo.new(dur, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Position = UDim2.new(0, x2, 0, y2)})
+                t2:Play(); t2.Completed:Wait()
+            end
+        end)
     end
-end
 
-function BallStyling:Toggle(state)
-    self.Enabled=state
-    for _,c in pairs(self.Connections) do c:Disconnect() end
-    self.Connections={}
-    if state then self:ScanExisting(); self:MonitorSpawn()
-    else
-        local balls=workspace:FindFirstChild("Balls")
-        if balls then
-            for _,ball in pairs(balls:GetChildren()) do
-                pcall(function()
-                    ball.Material=Enum.Material.Plastic
-                    for _,n in ipairs({"RainbowTrail","RainbowAtt0","RainbowAtt1"}) do
-                        local e=ball:FindFirstChild(n); if e then e:Destroy() end
-                    end
+    local AB1 = MakeGlow(depthFar, 120, 100, 280, 0.92)
+    local AB2 = MakeGlow(depthFar, 600, 130, 240, 0.93)
+    local AB3 = MakeGlow(depthFar, 360, 420, 300, 0.93)
+    Drift(AB1, 160, 130, 80, 60, 9)
+    Drift(AB2, 560, 95, 630, 165, 12)
+    Drift(AB3, 400, 460, 300, 380, 10)
+
+    -- Shooting stars
+    task.spawn(function()
+        while self._win and self._win.Parent do
+            task.wait(3 + math.random() * 5)
+            pcall(function()
+                local fl = math.random() > 0.5
+                local sx, sy = fl and -30 or self._W + 30, math.random(10, math.floor(self._H * 0.5))
+                local ex, ey = fl and self._W + 30 or -30, sy + 80 + math.random(0, 80)
+                local head = Create("Frame", {
+                    Parent = self._win,
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    Position = UDim2.new(0, sx, 0, sy),
+                    Size = UDim2.new(0, 4, 0, 4),
+                    BackgroundColor3 = Color3.new(1, 1, 1),
+                    BackgroundTransparency = 0.1,
+                    BorderSizePixel = 0, ZIndex = 44,
+                })
+                Corner(head, 3)
+                local tail = Create("Frame", {
+                    Parent = self._win,
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    Position = UDim2.new(0, sx, 0, sy),
+                    Size = UDim2.new(0, 28, 0, 2),
+                    BackgroundColor3 = Color3.new(1, 1, 1),
+                    BackgroundTransparency = 0.5,
+                    BorderSizePixel = 0,
+                    Rotation = math.deg(math.atan2(ey - sy, ex - sx)),
+                    ZIndex = 43,
+                })
+                Corner(tail, 2)
+                local dur = 0.65 + math.random() * 0.4
+                Tween(head, {Position = UDim2.new(0, ex, 0, ey), BackgroundTransparency = 1}, dur, Enum.EasingStyle.Sine)
+                Tween(tail, {Position = UDim2.new(0, ex, 0, ey), Size = UDim2.new(0, 5, 0, 2), BackgroundTransparency = 1}, dur, Enum.EasingStyle.Sine)
+                task.delay(dur + 0.1, function()
+                    if head then head:Destroy() end
+                    if tail then tail:Destroy() end
                 end)
-            end
-        end
-    end
-end
-
--- ===== KILL SOUND =====
-local KillSoundSystem = {
-    Enabled=false,
-    Sounds={
-        {id="92076037937225", name="Fahhhh"},
-        {id="96664488756631", name="Very angry"},
-        {id="116957716755028", name="Leave me alone"},
-        {id="8643750815", name="Get over here"},
-        {id="93779555057888", name="HEHEHE HA"},
-        {id="84233173598772", name="Head shot"},
-        {id="8097518145", name="Lesgoo"},
-    },
-    SelectedSound="Fahhhh",
-    Connections={},
-}
-
-function KillSoundSystem:Play(position)
-    if not self.Enabled then return end
-    local data; for _,s in ipairs(self.Sounds) do if s.name==self.SelectedSound then data=s; break end end
-    if not data then return end
-    local part=Instance.new("Part"); part.Anchored=true; part.CanCollide=false; part.Transparency=1
-    part.Size=Vector3.new(0.1,0.1,0.1); part.Position=position; part.Parent=workspace
-    local sound=Instance.new("Sound"); sound.SoundId="rbxassetid://"..data.id
-    sound.Volume=0.7; sound.RollOffMode=Enum.RollOffMode.Linear; sound.MaxDistance=500
-    sound.Parent=part; sound:Play()
-    Debris:AddItem(part,4.5)
-end
-
-function KillSoundSystem:Toggle(state)
-    self.Enabled=state
-    for _,c in pairs(self.Connections) do c:Disconnect() end
-    self.Connections={}
-    if not state then return end
-    local function onChar(p, char)
-        local hum=char:WaitForChild("Humanoid",5)
-        if hum then hum.Died:Connect(function()
-            local pos=char.PrimaryPart and char.PrimaryPart.Position or workspace.CurrentCamera.CFrame.Position
-            self:Play(pos)
-        end) end
-    end
-    for _,p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then
-            if p.Character then task.spawn(onChar, p, p.Character) end
-            table.insert(self.Connections, p.CharacterAdded:Connect(function(c) onChar(p,c) end))
-        end
-    end
-    table.insert(self.Connections, Players.PlayerAdded:Connect(function(p)
-        if p ~= LocalPlayer then
-            table.insert(self.Connections, p.CharacterAdded:Connect(function(c) onChar(p,c) end))
-        end
-    end))
-end
-
--- ===== BALL STATS =====
-local BallStats = { Enabled=false, Gui=nil, SpeedLabel=nil, UpdateConn=nil }
-
-function BallStats:Toggle(state)
-    self.Enabled=state
-    if self.UpdateConn then self.UpdateConn:Disconnect(); self.UpdateConn=nil end
-    if self.Gui then self.Gui:Destroy(); self.Gui=nil; self.SpeedLabel=nil end
-    if not state then return end
-    local sg=Instance.new("ScreenGui"); sg.Name="BLBallStats"; sg.ResetOnSpawn=false; sg.Parent=CoreGui
-    pcall(function() protect_gui(sg) end)
-    self.Gui=sg
-    local frame=Instance.new("Frame"); frame.Size=UDim2.new(0,180,0,60)
-    frame.Position=UDim2.new(1,-195,0,55); frame.AnchorPoint=Vector2.new(0,0)
-    frame.BackgroundColor3=Color3.fromRGB(8,10,20); frame.BorderSizePixel=0
-    frame.Active=true; frame.Draggable=true; frame.Parent=sg
-    Instance.new("UICorner",frame).CornerRadius=UDim.new(0,8)
-    local stroke=Instance.new("UIStroke",frame); stroke.Color=Color3.fromRGB(0,80,160); stroke.Thickness=1.5
-    local title=Instance.new("TextLabel",frame); title.Size=UDim2.new(1,0,0,20)
-    title.Text="⚡ BALL STATS"; title.TextColor3=Color3.fromRGB(100,180,255)
-    title.BackgroundTransparency=1; title.TextSize=12; title.Font=Enum.Font.GothamBold
-    local speedLbl=Instance.new("TextLabel",frame); speedLbl.Size=UDim2.new(1,-10,0,18)
-    speedLbl.Position=UDim2.new(0,5,0,22); speedLbl.Text="Speed: 0 studs/s"
-    speedLbl.TextColor3=Color3.fromRGB(255,200,0); speedLbl.BackgroundTransparency=1
-    speedLbl.TextSize=12; speedLbl.Font=Enum.Font.GothamBold
-    speedLbl.TextXAlignment=Enum.TextXAlignment.Left
-    self.SpeedLabel=speedLbl
-    local velLbl=Instance.new("TextLabel",frame); velLbl.Size=UDim2.new(1,-10,0,18)
-    velLbl.Position=UDim2.new(0,5,0,40); velLbl.Text="Velocity: 0,0,0"
-    velLbl.TextColor3=Color3.fromRGB(0,200,255); velLbl.BackgroundTransparency=1
-    velLbl.TextSize=11; velLbl.Font=Enum.Font.Gotham
-    velLbl.TextXAlignment=Enum.TextXAlignment.Left
-    self.VelLabel=velLbl
-    self.UpdateConn=RunService.Heartbeat:Connect(function()
-        if not self.Enabled then return end
-        local ball=System.ball.get()
-        if ball and ball:FindFirstChild("zoomies") then
-            local vel=ball.zoomies.VectorVelocity
-            local spd=vel.Magnitude
-            speedLbl.Text=string.format("Speed: %.1f studs/s", spd)
-            velLbl.Text=string.format("Dir: %.1f, %.1f, %.1f", vel.X, vel.Y, vel.Z)
-        else
-            speedLbl.Text="Speed: 0 studs/s"; velLbl.Text="Dir: —"
-        end
-    end)
-end
-
--- ===== ABILITY DETECTION =====
-task.spawn(function()
-    pcall(function() ReplicatedStorage.Remotes.DeathBall.OnClientEvent:Connect(function(_,v) AbilityFlags.DeathSlashBall=v end) end)
-    pcall(function() ReplicatedStorage.Remotes.InfinityBall.OnClientEvent:Connect(function(_,v) AbilityFlags.InfinityBall=v end) end)
-    pcall(function() ReplicatedStorage.Remotes.TimeHoleHoldBall.OnClientEvent:Connect(function(_,v) AbilityFlags.TimeHole=v end) end)
-    pcall(function()
-        ReplicatedStorage.Packages._Index["sleitnick_net@0.1.0"].net["RE/SlashesOfFuryActivate"].OnClientEvent:Connect(function(player)
-            if player==LocalPlayer or (player and player.Name==LocalPlayer.Name) then
-                AbilityFlags.SlashesofFury=true
-                task.delay(3, function() AbilityFlags.SlashesofFury=false end)
-            end
-        end)
-    end)
-    pcall(function()
-        ReplicatedStorage.Remotes.Phantom.OnClientEvent:Connect(function(a,b)
-            if b and b.Name==LocalPlayer.Name then
-                AbilityFlags.Phantom=true
-                task.delay(2, function() AbilityFlags.Phantom=false end)
-            end
-        end)
-    end)
-    pcall(function()
-        RunService.PreSimulation:Connect(function()
-            local char=LocalPlayer.Character
-            local hrp=char and char:FindFirstChild("HumanoidRootPart")
-            AbilityFlags.Singularity=(hrp and hrp:FindFirstChild("SingularityCape")) and true or false
-        end)
-    end)
-    pcall(function()
-        if Runtime then
-            Runtime.ChildAdded:Connect(function(child)
-                if child.Name=="Tornado" then
-                    AbilityFlags.Tornado=true
-                    task.delay(child:GetAttribute("TornadoTime") or 1.5, function() AbilityFlags.Tornado=false end)
-                end
             end)
         end
     end)
-    pcall(function() ReplicatedStorage.Remotes.PlrPulled.OnClientEvent:Connect(function() AbilityFlags.Pull=true; task.delay(1.5,function() AbilityFlags.Pull=false end) end) end)
-    pcall(function() ReplicatedStorage.Remotes.PlrPulsed.OnClientEvent:Connect(function() AbilityFlags.Pulse=true; task.delay(1.5,function() AbilityFlags.Pulse=false end) end) end)
-    pcall(function()
-        RunService.PreSimulation:Connect(function()
-            local red=LocalPlayer.PlayerGui:FindFirstChild("Hotbar") and
-                      LocalPlayer.PlayerGui.Hotbar:FindFirstChild("Ability") and
-                      LocalPlayer.PlayerGui.Hotbar.Ability:FindFirstChild("Red")
-            if red then AbilityFlags.Forcefield=red.Visible end
-        end)
-    end)
-    pcall(function()
-        local abilityCD=LocalPlayer.PlayerGui.Hotbar.Ability.Duration.Fill.UIGradient
-        abilityCD:GetPropertyChangedSignal("Offset"):Connect(function()
-            if abilityCD.Offset.Y >= 0.985 then AbilityFlags.AbilityActive=false
-            else
-                local char=LocalPlayer.Character
-                if char and char:FindFirstChild("Abilities") then
-                    local any=false
-                    for _,ab in ipairs(char.Abilities:GetChildren()) do if ab:IsA("BoolValue") and ab.Enabled then any=true; break end end
-                    AbilityFlags.AbilityActive=any
+
+    -- Cursor trail (relative to window)
+    task.spawn(function()
+        local lastT, lastP = 0, Vector2.new(0, 0)
+        while self._win and self._win.Parent do
+            pcall(function()
+                local m = UserInputService:GetMouseLocation()
+                local wp = self._win.AbsolutePosition
+                local lp = Vector2.new(m.X - wp.X, m.Y - wp.Y)
+                if lp.X > 0 and lp.X < self._win.AbsoluteSize.X and
+                   lp.Y > 0 and lp.Y < self._win.AbsoluteSize.Y then
+                    local now = os.clock()
+                    if now - lastT > 0.055 and (lp - lastP).Magnitude > 7 then
+                        lastT = now; lastP = lp
+                        local dot = Create("Frame", {
+                            Parent = self._win,
+                            AnchorPoint = Vector2.new(0.5, 0.5),
+                            Position = UDim2.new(0, lp.X, 0, lp.Y),
+                            Size = UDim2.new(0, 7, 0, 7),
+                            BackgroundColor3 = T.Accent,
+                            BackgroundTransparency = 0.35,
+                            BorderSizePixel = 0, ZIndex = 42,
+                        })
+                        Corner(dot, 300)
+                        Tween(dot, {
+                            Size = UDim2.new(0, 1, 0, 1),
+                            BackgroundTransparency = 1,
+                            Position = UDim2.new(0, lp.X, 0, lp.Y - 4),
+                        }, 0.45, Enum.EasingStyle.Quad)
+                        task.delay(0.5, function()
+                            if dot and dot.Parent then dot:Destroy() end
+                        end)
+                    end
                 end
-            end
-        end)
-    end)
-    pcall(function() ReplicatedStorage.Remotes.Dribble.OnClientEvent:Connect(function(v) AbilityFlags.Dribble=v end) end)
-    pcall(function()
-        ReplicatedStorage.Remotes.PlrHellHooked.OnClientEvent:Connect(function(a,b)
-            if b and b.Name==LocalPlayer.Name then AbilityFlags.HellHook=true; task.delay(2,function() AbilityFlags.HellHook=false end) end
-        end)
-    end)
-end)
-
--- ===== KEYBIND ENGINE =====
-local Keybinds = {}
-local WaitingForKey = nil
-
-local function fireKeybind(keyName)
-    local bind = Keybinds[keyName]
-    if not bind then return end
-    bind.enabled = not bind.enabled
-    if bind.callback then bind.callback(bind.enabled) end
-end
-
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
-    local keyName = input.KeyCode.Name
-    if WaitingForKey then
-        local slot = WaitingForKey
-        for k,v in pairs(Keybinds) do
-            if v.slot == slot.name then Keybinds[k]=nil; break end
+            end)
+            RunService.RenderStepped:Wait()
         end
-        Keybinds[keyName] = { name=slot.name, slot=slot.name, callback=slot.callback, enabled=false }
-        Settings["KB_"..slot.name:gsub(" ","_")] = keyName
-        SaveSettings()
-        if slot.uiCallback then slot.uiCallback(keyName) end
-        WaitingForKey = nil
-        return
-    end
-    fireKeybind(keyName)
-end)
+    end)
 
-local function RegisterKeybind(name, defaultKey, callback)
-    local savedKey = Settings["KB_"..name:gsub(" ","_")] or defaultKey
-    Keybinds[savedKey] = { name=name, slot=name, callback=callback, enabled=false }
-    return savedKey
-end
-
--- ===== BOOT SYSTEMS =====
-getgenv().AutoParryMode = Settings.ParryMode
-getgenv().AutoSpamMode = Settings.AutoSpamMode
-if Settings.AutoParry then System.autoparry.start() end
-if Settings.ManualSpam then System.manual_spam.start() end
-if Settings.AutoSpam then System.auto_spam.start() end
-if Settings.BallStylingEnabled then BallStyling:Toggle(true) end
-if Settings.KillSoundEnabled then
-    KillSoundSystem.SelectedSound = Settings.SelectedKillSound or "Fahhhh"
-    KillSoundSystem:Toggle(true)
-end
-
--- ===== ALLUSIVE UI =====
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/naturaldesire23/gtddd/refs/heads/main/mm2sa.lua"))()
-
-local UI = Library.new({
-    title = "BYTE LITE",
-    PrimaryColor = Color3.fromRGB(150, 150, 150),
-})
-UI:load()
-
-local CombatTab = UI:create_tab('Combat', 'rbxassetid://76499042599127')
-local SpamTab = UI:create_tab('Spam', 'rbxassetid://132243429647479')
-local DetectionTab = UI:create_tab('Detections', 'rbxassetid://10723346959')
-local SkinTab = UI:create_tab('Skin', 'rbxassetid://10734966248')
-local VisualsTab = UI:create_tab('Visuals', 'rbxassetid://76499042599127')
-local FunctionsTab = UI:create_tab('Functions', 'rbxassetid://10723346959')
-local KeybindsTab = UI:create_tab('Keybinds', 'rbxassetid://81598136527047')
-
--- ===== COMBAT TAB =====
-local AutoParryMod = CombatTab:create_module({
-    title = 'Auto Parry',
-    flag = 'Auto_Parry',
-    description = 'Distance-based auto parry',
-    section = 'left',
-    callback = function(value)
-        Settings.AutoParry = value
-        System.__properties.__autoparry_enabled = value
-        if value then System.autoparry.start() else System.autoparry.stop() end
-        SaveSettings()
-    end
-})
-
-AutoParryMod:create_slider({
-    title = 'Accuracy',
-    flag = 'Parry_Accuracy',
-    minimum_value = 1,
-    maximum_value = 100,
-    value = Settings.ParryAccuracy,
-    round_number = true,
-    callback = function(value)
-        System.__properties.__accuracy = value
-        Settings.ParryAccuracy = value; update_divisor(); SaveSettings()
-    end
-})
-
-AutoParryMod:create_dropdown({
-    title = 'Parry Mode',
-    flag = 'Parry_Mode',
-    options = {'Remote','Keypress'},
-    multi_dropdown = false,
-    maximum_options = 2,
-    callback = function(value)
-        getgenv().AutoParryMode = value
-        Settings.ParryMode = value; SaveSettings()
-    end
-})
-
-AutoParryMod:create_dropdown({
-    title = 'Curve Type',
-    flag = 'Curve_Type',
-    options = {'Camera','Mouse','Players','Normal','Up','Down','Left','Right','Behind','Random','FrontLeft','FrontRight','BackLeft','BackRight','Spin','TargetHead','High','RandomTarget'},
-    multi_dropdown = false,
-    maximum_options = 18,
-    callback = function(value)
-        System.__properties.__curve_mode = value
-        Settings.CurveType = value; SaveSettings()
-    end
-})
-
-AutoParryMod:create_checkbox({
-    title = 'Anti-Curve',
-    flag = 'Anti_Curve',
-    callback = function(value) Settings.AntiCurve=value; SaveSettings() end
-})
-
-AutoParryMod:create_checkbox({
-    title = 'Random Accuracy',
-    flag = 'Random_Accuracy',
-    callback = function(value)
-        System.__properties.__random_accuracy=value; Settings.RandomAccuracy=value; SaveSettings()
-    end
-})
-
-AutoParryMod:create_checkbox({
-    title = 'Grab Parry',
-    flag = 'Grab_Parry',
-    callback = function(value)
-        System.__properties.__grab_parry_enabled=value; Settings.GrabParry=value; SaveSettings()
-    end
-})
-
-local AutoSpamMod = CombatTab:create_module({
-    title = 'Auto Spam',
-    flag = 'Auto_Spam',
-    description = 'Spams parry at close range',
-    section = 'right',
-    callback = function(value)
-        Settings.AutoSpam = value
-        if value then System.auto_spam.start() else System.auto_spam.stop() end
-        SaveSettings()
-    end
-})
-
-AutoSpamMod:create_dropdown({
-    title = 'Spam Mode',
-    flag = 'Spam_Mode',
-    options = {'Remote','Keypress'},
-    multi_dropdown = false,
-    maximum_options = 2,
-    callback = function(value)
-        getgenv().AutoSpamMode=value; Settings.AutoSpamMode=value; SaveSettings()
-    end
-})
-
-AutoSpamMod:create_dropdown({
-    title = 'Detection Mode',
-    flag = 'Spam_Detection_Mode',
-    options = {'Distance','Hybrid'},
-    multi_dropdown = false,
-    maximum_options = 2,
-    callback = function(value) Settings.AutoSpamModeType=value; SaveSettings() end
-})
-
-AutoSpamMod:create_slider({
-    title = 'Distance Gate',
-    flag = 'Distance_Gate',
-    minimum_value = 5,
-    maximum_value = 35,
-    value = math.floor(Settings.DistanceMultiplier*100),
-    round_number = true,
-    callback = function(value) Settings.DistanceMultiplier=value/100; SaveSettings() end
-})
-
--- ===== SPAM TAB =====
-local ManualSpamMod = SpamTab:create_module({
-    title = 'Manual Spam',
-    flag = 'Manual_Spam',
-    description = 'Toggle spams parry at set CPS',
-    section = 'left',
-    callback = function(value)
-        Settings.ManualSpam = value
-        if value then System.manual_spam.start() else System.manual_spam.stop() end
-        SaveSettings()
-    end
-})
-
-ManualSpamMod:create_slider({
-    title = 'CPS',
-    flag = 'Manual_CPS',
-    minimum_value = 1,
-    maximum_value = 2000,
-    value = Settings.ManualSpamCPS,
-    round_number = true,
-    callback = function(value) Settings.ManualSpamCPS=value; SaveSettings() end
-})
-
--- ===== DETECTIONS TAB =====
-local DetMod = DetectionTab:create_module({
-    title = 'Ability Detections',
-    flag = 'Det_Module',
-    description = 'Skip auto parry on these abilities',
-    section = 'left',
-    callback = function() end
-})
-
-local detList = {
-    {'Infinity Ball', 'InfinityDetection'},
-    {'Death Slash', 'DeathSlashDetection'},
-    {'Time Hole', 'TimeHoleDetection'},
-    {'Slashes of Fury', 'SlashesofFuryDetection'},
-    {'Forcefield', 'ForcefieldDetection'},
-    {'Phantom', 'PhantomDetection'},
-    {'Singularity', 'SingularityDetection'},
-    {'Dribble', 'DribbleDetection'},
-    {'Pull', 'PullDetection'},
-    {'Pulse', 'PulseDetection'},
-    {'Ability Active', 'AbilityActiveDetection'},
-    {'Tornado', 'TornadoDetection'},
-    {'Hell Hook', 'HellHookDetection'},
-}
-for _,d in ipairs(detList) do
-    DetMod:create_checkbox({
-        title = d[1],
-        flag = d[2],
-        callback = function(value) Settings[d[2]]=value; SaveSettings() end
-    })
-end
-
--- ===== SKIN TAB =====
-local SkinMod = SkinTab:create_module({
-    title = 'Skin Changer',
-    flag = 'Skin_Module',
-    description = 'Textbox-based sword skin',
-    section = 'left',
-    callback = function(value)
-        if value then getgenv().EnableSkinChanger()
-        else getgenv().DisableSkinChanger() end
-    end
-})
-
-SkinMod:create_checkbox({
-    title = 'Enable Skin Changer',
-    flag = 'Skin_Enable',
-    callback = function(value)
-        if value then getgenv().EnableSkinChanger()
-        else getgenv().DisableSkinChanger() end
-    end
-})
-
-SkinMod:create_textbox({
-    title = 'Sword Model Name',
-    placeholder = 'e.g. Witch\'s Curse',
-    flag = 'Sword_Model',
-    callback = function(text)
-        if text ~= "" then
-            getgenv().SwordModel = text
-            if getgenv().SwordAnimation == "" then getgenv().SwordAnimation = text end
-            if getgenv().SwordFX == "" then getgenv().SwordFX = text end
-            if getgenv().SkinChangerEnabled then setSword() end
-        end
-    end
-})
-
-SkinMod:create_textbox({
-    title = 'Animation Override',
-    placeholder = 'Leave blank = same as model',
-    flag = 'Sword_Animation',
-    callback = function(text)
-        getgenv().SwordAnimation = text ~= "" and text or getgenv().SwordModel
-        if getgenv().SkinChangerEnabled then setSword() end
-    end
-})
-
-SkinMod:create_textbox({
-    title = 'FX Override',
-    placeholder = 'Leave blank = same as model',
-    flag = 'Sword_FX',
-    callback = function(text)
-        getgenv().SwordFX = text ~= "" and text or getgenv().SwordModel
-        if getgenv().SkinChangerEnabled then setSword() end
-    end
-})
-
-local FakeBodyMod = SkinTab:create_module({
-    title = 'Fake Body',
-    flag = 'Fake_Body_Module',
-    description = 'Headless + Korblox cosmetics',
-    section = 'right',
-    callback = function(value)
-        System.__properties.__fake_body_enabled = value
-        if value and LocalPlayer.Character then applyFakeBody(LocalPlayer.Character) end
-    end
-})
-
-FakeBodyMod:create_checkbox({
-    title = 'Headless & Korblox',
-    flag = 'Fake_Body_Enable',
-    callback = function(value)
-        System.__properties.__fake_body_enabled = value
-        if value and LocalPlayer.Character then applyFakeBody(LocalPlayer.Character) end
-    end
-})
-
--- ===== VISUALS TAB =====
-local BallStyleMod = VisualsTab:create_module({
-    title = 'Ball Styling',
-    flag = 'Ball_Style_Module',
-    description = 'Chroma rainbow ball',
-    section = 'left',
-    callback = function(value) Settings.BallStylingEnabled=value; BallStyling:Toggle(value); SaveSettings() end
-})
-
-BallStyleMod:create_checkbox({
-    title = 'Chroma Ball',
-    flag = 'Chroma_Ball',
-    callback = function(value) Settings.BallStylingEnabled=value; BallStyling:Toggle(value); SaveSettings() end
-})
-
-local KillSoundMod = VisualsTab:create_module({
-    title = 'Kill Sound',
-    flag = 'Kill_Sound_Module',
-    description = 'Plays a sound on kill',
-    section = 'right',
-    callback = function(value)
-        Settings.KillSoundEnabled = value; KillSoundSystem:Toggle(value); SaveSettings()
-    end
-})
-
-KillSoundMod:create_checkbox({
-    title = 'Enable Kill Sound',
-    flag = 'Kill_Sound_Enable',
-    callback = function(value) Settings.KillSoundEnabled=value; KillSoundSystem:Toggle(value); SaveSettings() end
-})
-
-local soundNames={}; for _,s in ipairs(KillSoundSystem.Sounds) do table.insert(soundNames, s.name) end
-KillSoundMod:create_dropdown({
-    title = 'Sound',
-    flag = 'Kill_Sound_Select',
-    options = soundNames,
-    multi_dropdown = false,
-    maximum_options = #soundNames,
-    callback = function(value)
-        Settings.SelectedKillSound=value; KillSoundSystem.SelectedSound=value; SaveSettings()
-    end
-})
-
-local BallStatsMod = VisualsTab:create_module({
-    title = 'Ball Stats',
-    flag = 'Ball_Stats_Module',
-    description = 'Floating speed/velocity window',
-    section = 'left',
-    callback = function(value) BallStats:Toggle(value) end
-})
-
-BallStatsMod:create_checkbox({
-    title = 'Show Ball Stats',
-    flag = 'Ball_Stats_Enable',
-    callback = function(value) BallStats:Toggle(value) end
-})
-
--- ===== FUNCTIONS TAB =====
-local FuncMod = FunctionsTab:create_module({
-    title = 'Active Functions',
-    flag = 'Func_Module',
-    description = 'Live status of all features',
-    section = 'left',
-    callback = function() end
-})
-
-local funcLabels = {
-    {label='Auto Parry', getState=function() return Settings.AutoParry end},
-    {label='Auto Spam', getState=function() return Settings.AutoSpam end},
-    {label='Manual Spam', getState=function() return Settings.ManualSpam end},
-    {label='Anti-Curve', getState=function() return Settings.AntiCurve end},
-    {label='Grab Parry', getState=function() return Settings.GrabParry end},
-    {label='Skin Changer', getState=function() return getgenv().SkinChangerEnabled end},
-    {label='Ball Styling', getState=function() return Settings.BallStylingEnabled end},
-    {label='Kill Sound', getState=function() return Settings.KillSoundEnabled end},
-    {label='Ball Stats', getState=function() return BallStats.Enabled end},
-    {label='Fake Body', getState=function() return System.__properties.__fake_body_enabled end},
-}
-
-local funcCheckboxCallbacks = {
-    ['Auto Parry'] = function(v) Settings.AutoParry=v; System.__properties.__autoparry_enabled=v; if v then System.autoparry.start() else System.autoparry.stop() end; SaveSettings() end,
-    ['Auto Spam'] = function(v) Settings.AutoSpam=v; if v then System.auto_spam.start() else System.auto_spam.stop() end; SaveSettings() end,
-    ['Manual Spam'] = function(v) Settings.ManualSpam=v; if v then System.manual_spam.start() else System.manual_spam.stop() end; SaveSettings() end,
-    ['Anti-Curve'] = function(v) Settings.AntiCurve=v; SaveSettings() end,
-    ['Grab Parry'] = function(v) System.__properties.__grab_parry_enabled=v; Settings.GrabParry=v; SaveSettings() end,
-    ['Skin Changer'] = function(v) if v then getgenv().EnableSkinChanger() else getgenv().DisableSkinChanger() end end,
-    ['Ball Styling'] = function(v) Settings.BallStylingEnabled=v; BallStyling:Toggle(v); SaveSettings() end,
-    ['Kill Sound'] = function(v) Settings.KillSoundEnabled=v; KillSoundSystem:Toggle(v); SaveSettings() end,
-    ['Ball Stats'] = function(v) BallStats:Toggle(v) end,
-    ['Fake Body'] = function(v) System.__properties.__fake_body_enabled=v; if v and LocalPlayer.Character then applyFakeBody(LocalPlayer.Character) end end,
-}
-
-for _,f in ipairs(funcLabels) do
-    FuncMod:create_checkbox({
-        title = f.label,
-        flag = 'Func_'..f.label:gsub(' ','_'),
-        callback = funcCheckboxCallbacks[f.label] or function() end
-    })
-end
-
--- ===== KEYBINDS TAB — fixed with proper click-to-bind =====
-local KBMod = KeybindsTab:create_module({
-    title = 'Keybinds',
-    flag = 'KB_Module',
-    description = 'Click a checkbox title, then press any key to bind',
-    section = 'left',
-    callback = function() end
-})
-
--- Store checkbox instances to update titles
-local keybindCheckboxes = {}
-
-local function makeKeybindRow(name, defaultKey, onToggle)
-    local currentKey = Settings["KB_"..name:gsub(" ","_")] or defaultKey
-    RegisterKeybind(name, currentKey, onToggle)
-    
-    -- Create the checkbox
-    local chk = KBMod:create_checkbox({
-        title = name .. ' [' .. currentKey .. ']',
-        flag = 'KB_Btn_' .. name:gsub(' ','_'),
-        callback = function(val)
-            -- Ignore the toggle; instead start rebind
-            if WaitingForKey then
-                WaitingForKey = nil
-                return
-            end
-            WaitingForKey = {
-                name = name,
-                callback = onToggle,
-                uiCallback = function(newKey)
-                    -- Update the checkbox title by finding its label
+    -- Twinkle particles
+    task.spawn(function()
+        while self._win and self._win.Parent do
+            task.wait(1.8 + math.random() * 3)
+            pcall(function()
+                local h = Create("Frame", {
+                    Parent = self._win,
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    Position = UDim2.new(0, math.random(30, self._W - 30), 0, math.random(30, self._H - 30)),
+                    Size = UDim2.new(0, 12, 0, 12),
+                    BackgroundTransparency = 1, ZIndex = 43,
+                })
+                local sc = Create("UIScale", {Scale = 0, Parent = h})
+                local hb = Create("Frame", {
+                    Parent = h, AnchorPoint = Vector2.new(0.5, 0.5),
+                    Position = UDim2.new(0.5, 0, 0.5, 0),
+                    Size = UDim2.new(1, 0, 0, 2),
+                    BackgroundColor3 = Color3.new(1, 1, 1),
+                    BackgroundTransparency = 0.2, BorderSizePixel = 0,
+                })
+                Corner(hb, 1)
+                local vb = Create("Frame", {
+                    Parent = h, AnchorPoint = Vector2.new(0.5, 0.5),
+                    Position = UDim2.new(0.5, 0, 0.5, 0),
+                    Size = UDim2.new(0, 2, 1, 0),
+                    BackgroundColor3 = Color3.new(1, 1, 1),
+                    BackgroundTransparency = 0.2, BorderSizePixel = 0,
+                })
+                Corner(vb, 1)
+                Tween(sc, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1})
+                task.delay(0.32, function()
                     pcall(function()
-                        local allButtons = KBMod._instances or {}
-                        for _,inst in ipairs(allButtons) do
-                            if inst:IsA("Frame") and inst:FindFirstChild("TitleLabel") then
-                                local lbl = inst:FindFirstChild("TitleLabel")
-                                if lbl and lbl:IsA("TextLabel") and lbl.Text:match(name) then
-                                    lbl.Text = name .. ' [' .. newKey .. ']'
-                                end
-                            end
-                        end
+                        Tween(sc, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Scale = 0})
+                        Tween(hb, TweenInfo.new(0.3), {BackgroundTransparency = 1})
+                        Tween(vb, TweenInfo.new(0.3), {BackgroundTransparency = 1})
                     end)
-                    Library.SendNotification({
-                        title = "Keybind Set",
-                        text = name .. " → " .. newKey,
-                        duration = 2
-                    })
-                end
-            }
+                end)
+                task.delay(0.75, function() if h then h:Destroy() end end)
+            end)
         end
-    })
-    table.insert(keybindCheckboxes, chk)
-    -- Store reference for title updates
-    if not KBMod._instances then KBMod._instances = {} end
-    table.insert(KBMod._instances, chk)
+    end)
 end
 
-makeKeybindRow("Manual Spam", Settings.KB_ManualSpam or "E", function(enabled)
-    Settings.ManualSpam = enabled
-    if enabled then System.manual_spam.start() else System.manual_spam.stop() end
-    SaveSettings()
-end)
+-- ─── INIT SEQUENCE ────────────────────────────────────────────
+function NexUI:_buildInitSequence(title)
+    local T  = self._theme
+    local W, H = self._W, self._H
 
-makeKeybindRow("Auto Parry", Settings.KB_AutoParry or "V", function(enabled)
-    Settings.AutoParry = enabled
-    System.__properties.__autoparry_enabled = enabled
-    if enabled then System.autoparry.start() else System.autoparry.stop() end
-    SaveSettings()
-end)
+    local loader = Create("Frame", {
+        Parent = self._win, Size = UDim2.new(1, 0, 1, 0),
+        BackgroundColor3 = T.GlassBg, BackgroundTransparency = 0,
+        BorderSizePixel = 0, ZIndex = 80,
+    })
+    Corner(loader, 22)
 
-makeKeybindRow("Auto Spam", Settings.KB_AutoSpam or "G", function(enabled)
-    Settings.AutoSpam = enabled
-    if enabled then System.auto_spam.start() else System.auto_spam.stop() end
-    SaveSettings()
-end)
+    -- Hex grid background effect (rings expanding from center)
+    local ringContainer = Create("Frame", {
+        Parent = loader, Size = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1, ZIndex = 81,
+    })
+    for i = 1, 5 do
+        local ring = Create("Frame", {
+            Parent = ringContainer,
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.5, 0, 0.42, 0),
+            Size = UDim2.new(0, 0, 0, 0),
+            BackgroundTransparency = 1,
+            ZIndex = 81,
+        })
+        Corner(ring, 300)
+        local rStroke = Stroke(ring, T.Accent, 1.5, 0.3)
+        task.delay(i * 0.18, function()
+            if not (ring and ring.Parent) then return end
+            local sz = i * 120
+            Tween(ring, {Size = UDim2.new(0, sz, 0, sz)}, 1.8, Enum.EasingStyle.Quart)
+            Tween(rStroke, {Transparency = 1}, 1.8, Enum.EasingStyle.Quart)
+        end)
+    end
 
-makeKeybindRow("Chroma Ball", Settings.KB_ChromaBall or "B", function(enabled)
-    Settings.BallStylingEnabled = enabled
-    BallStyling:Toggle(enabled); SaveSettings()
-end)
+    -- Center logo
+    local logoHolder = Create("Frame", {
+        Parent = loader, AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.38, 0),
+        Size = UDim2.new(0, 68, 0, 68),
+        BackgroundTransparency = 1, ZIndex = 83,
+    })
+    local logoScale = Create("UIScale", {Scale = 0, Parent = logoHolder})
 
--- ===== STARTUP NOTIFICATION =====
-Library.SendNotification({
-    title = "BYTE LITE",
-    text = "Loaded. Insert = toggle UI.",
-    duration = 3
-})
+    local logoGlow = Create("Frame", {
+        Parent = logoHolder, AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        Size = UDim2.new(2.2, 0, 2.2, 0),
+        BackgroundColor3 = T.Accent, BackgroundTransparency = 0.88,
+        BorderSizePixel = 0,
+    })
+    Corner(logoGlow, 300)
+    TweenService:Create(logoGlow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {BackgroundTransparency = 0.82}):Play()
 
-print("[Byte Lite] Loaded")
-print("[Keybinds] Click a keybind checkbox title, then press a key.")
+    local logoBg = Create("Frame", {
+        Parent = logoHolder, AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        Size = UDim2.new(1, 0, 1, 0),
+        BackgroundColor3 = T.Accent, BorderSizePixel = 0, ZIndex = 84,
+    })
+    Corner(logoBg, 18)
+
+    -- Spinning ring
+    local spinRing = Create("Frame", {
+        Parent = logoHolder, AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        Size = UDim2.new(1.4, 0, 1.4, 0),
+        BackgroundTransparency = 1, ZIndex = 82,
+    })
+    Corner(spinRing, 300)
+    local spinStroke = Stroke(spinRing, T.Accent, 2, 0)
+    Create("UIGradient", {
+        Parent = spinStroke,
+        Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.05),
+            NumberSequenceKeypoint.new(0.45, 0.85),
+            NumberSequenceKeypoint.new(1, 0.4),
+        }),
+    })
+    TweenService:Create(spinRing, TweenInfo.new(1.2, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, -1), {Rotation = 360}):Play()
+
+    Create("TextLabel", {
+        Parent = logoBg, Size = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1,
+        Text = title:sub(1, 1):upper(),
+        Font = Enum.Font.GothamBlack,
+        TextSize = 30, TextColor3 = Color3.new(1, 1, 1), ZIndex = 85,
+    })
+
+    -- Title text
+    local titleLbl = Create("TextLabel", {
+        Parent = loader, AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0.55, 0),
+        Size = UDim2.new(0, 320, 0, 26),
+        BackgroundTransparency = 1,
+        Text = title, Font = Enum.Font.GothamBlack,
+        TextSize = 22, TextColor3 = T.Text,
+        TextTransparency = 1, ZIndex = 83,
+    })
+    local subtitleLbl = Create("TextLabel", {
+        Parent = loader, AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0.615, 0),
+        Size = UDim2.new(0, 320, 0, 16),
+        BackgroundTransparency = 1,
+        Text = "nexui  ·  loading",
+        Font = Enum.Font.Gotham, TextSize = 11,
+        TextColor3 = T.TextMuted, TextTransparency = 1, ZIndex = 83,
+    })
+
+    -- Progress bar
+    local progArea = Create("Frame", {
+        Parent = loader, AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0.72, 0),
+        Size = UDim2.new(0, 280, 0, 54),
+        BackgroundTransparency = 1, ZIndex = 83,
+    })
+    local statusLbl = Create("TextLabel", {
+        Parent = progArea, Size = UDim2.new(0.62, 0, 0, 16),
+        BackgroundTransparency = 1, Text = "Waking up",
+        Font = Enum.Font.Gotham, TextSize = 11,
+        TextColor3 = T.TextMuted, TextXAlignment = Enum.TextXAlignment.Left,
+    })
+    local pctLbl = Create("TextLabel", {
+        Parent = progArea, AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, 0, 0, 0),
+        Size = UDim2.new(0, 90, 0, 16),
+        BackgroundTransparency = 1, Text = "0%",
+        Font = Enum.Font.GothamBold, TextSize = 12,
+        TextColor3 = T.Text, TextXAlignment = Enum.TextXAlignment.Right,
+    })
+    local barBg = Create("Frame", {
+        Parent = progArea, Position = UDim2.new(0, 0, 0, 24),
+        Size = UDim2.new(1, 0, 0, 5),
+        BackgroundColor3 = T.TrackOff, BorderSizePixel = 0,
+    })
+    Corner(barBg, 3)
+    local barFill = Create("Frame", {
+        Parent = barBg, Size = UDim2.new(0, 0, 1, 0),
+        BackgroundColor3 = T.Accent, BorderSizePixel = 0,
+    })
+    Corner(barFill, 3)
+    Create("TextLabel", {
+        Parent = progArea, AnchorPoint = Vector2.new(0.5, 1),
+        Position = UDim2.new(0.5, 0, 1, 0),
+        Size = UDim2.new(1, 0, 0, 14),
+        BackgroundTransparency = 1, Text = "click to skip",
+        Font = Enum.Font.Gotham, TextSize = 10, TextColor3 = T.TextMuted,
+    })
+
+    -- Skip on click
+    local loaderDone = false
+    local function finishLoader()
+        if loaderDone then return end; loaderDone = true
+        Tween(barFill, {Size = UDim2.new(1, 0, 1, 0)}, 0.15)
+        pctLbl.Text = "100%"
+        statusLbl.Text = "Ready"
+        task.delay(0.3, function()
+            Tween(loader, {BackgroundTransparency = 1}, 0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+            task.delay(0.5, function()
+                if loader and loader.Parent then loader:Destroy() end
+                -- Reveal main window
+                self._win.Size = UDim2.new(0, self._W, 0, 0)
+                self._win.Visible = true
+                Tween(self._win, {Size = UDim2.new(0, self._W, 0, self._H)}, 1.1, Enum.EasingStyle.Quint)
+                Tween(self._blur, {Size = 18}, 1.1)
+                task.delay(0.5, function()
+                    self:Toast(title, "Ready. " .. (self._menuKey and ("Press " .. tostring(self._menuKey.Name) .. " to toggle") or ""), 4)
+                end)
+            end)
+        end)
+    end
+
+    loader.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then finishLoader() end
+    end)
+
+    -- Init animation sequence
+    task.spawn(function()
+        task.wait(0.1)
+        Tween(logoScale, TweenInfo.new(0.65, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1})
+        task.wait(0.45)
+        Tween(titleLbl, {TextTransparency = 0, Position = UDim2.new(0.5, 0, 0.54, 0)}, 0.5, Enum.EasingStyle.Quint)
+        task.wait(0.1)
+        Tween(subtitleLbl, {TextTransparency = 0}, 0.4)
+
+        local steps = {
+            {0, "Waking up"},
+            {0.2, "Building interface"},
+            {0.45, "Wiring keybinds"},
+            {0.68, "Applying theme"},
+            {0.88, "Final checks"},
+        }
+        local dur, t0 = 2.2, os.clock()
+        while not loaderDone do
+            local a = math.clamp((os.clock() - t0) / dur, 0, 1)
+            local e = 1 - math.pow(1 - a, 3)
+            pctLbl.Text = math.floor(e * 100 + 0.5) .. "%"
+            Tween(barFill, {Size = UDim2.new(e, 0, 1, 0)}, 0.06)
+            for _, s in ipairs(steps) do
+                if a >= s[1] then statusLbl.Text = s[2] end
+            end
+            if a >= 1 then break end
+            task.wait(0.03)
+        end
+        task.wait(0.3)
+        finishLoader()
+    end)
+end
+
+-- ─── MAIN WINDOW ──────────────────────────────────────────────
+function NexUI:_buildMainWindow(title, subtitle)
+    local T = self._theme
+    local W, H = self._W, self._H
+
+    local win = Create("Frame", {
+        Name = "NexWin", Parent = self._gui,
+        BackgroundColor3 = T.GlassBg, BackgroundTransparency = 0.06,
+        BorderSizePixel = 0,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        Size = UDim2.new(0, W, 0, H),
+        Visible = false, ClipsDescendants = true, ZIndex = 1,
+    })
+    Corner(win, 22)
+    local winStroke = Stroke(win, T.Stroke, 2, 0.4)
+    self:_reg(winStroke, "Color", "Stroke")
+    self:_reg(win, "BackgroundColor3", "GlassBg")
+    self._win = win
+
+    -- Glass shine
+    local shine = Create("Frame", {
+        Parent = win, BackgroundColor3 = T.Shine,
+        BackgroundTransparency = 0.93, BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0.42, 0), ZIndex = 3,
+    })
+    Create("UIGradient", {
+        Parent = shine, Rotation = 90,
+        Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.45),
+            NumberSequenceKeypoint.new(0.4, 0.82),
+            NumberSequenceKeypoint.new(1, 1),
+        }),
+    })
+
+    -- Left sidebar
+    local left = Create("Frame", {
+        Parent = win, BackgroundColor3 = T.GlassLeft,
+        BackgroundTransparency = 0.85, BorderSizePixel = 0,
+        Size = UDim2.new(0, 228, 1, 0), ZIndex = 5,
+    })
+    self:_reg(left, "BackgroundColor3", "GlassLeft")
+
+    local sep = Create("Frame", {
+        Parent = left, BackgroundColor3 = T.Stroke,
+        BackgroundTransparency = 0.3, BorderSizePixel = 0,
+        Position = UDim2.new(1, -1, 0, 0), Size = UDim2.new(0, 1, 1, 0), ZIndex = 6,
+    })
+    self:_reg(sep, "BackgroundColor3", "Stroke")
+
+    local titleLbl = Create("TextLabel", {
+        Parent = left, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 22, 0, 26), Size = UDim2.new(1, -34, 0, 30),
+        Font = Enum.Font.GothamBlack, Text = title,
+        TextColor3 = T.Text, TextSize = 22,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7,
+    })
+    self:_reg(titleLbl, "TextColor3", "Text")
+
+    local subLbl = Create("TextLabel", {
+        Parent = left, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 22, 0, 56), Size = UDim2.new(1, -34, 0, 14),
+        Font = Enum.Font.Gotham, Text = subtitle:upper(),
+        TextColor3 = T.TextMuted, TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 7,
+    })
+    self:_reg(subLbl, "TextColor3", "TextMuted")
+
+    -- Top accent line under header
+    local accentLine = Create("Frame", {
+        Parent = left, BackgroundColor3 = T.Accent,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, 22, 0, 72), Size = UDim2.new(0, 32, 0, 2), ZIndex = 7,
+    })
+    Corner(accentLine, 1)
+    self:_reg(accentLine, "BackgroundColor3", "Accent")
+
+    local tabsHolder = Create("Frame", {
+        Parent = left, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 12, 0, 90), Size = UDim2.new(1, -24, 1, -190),
+        ZIndex = 7, ClipsDescendants = true,
+    })
+    self._tabsHolder = tabsHolder
+    Create("UIListLayout", {
+        Parent = tabsHolder, Padding = UDim.new(0, 2),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    })
+
+    self:_buildProfile(left)
+
+    -- Content area
+    local contentArea = Create("Frame", {
+        Parent = win, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 228, 0, 0),
+        Size = UDim2.new(1, -228, 1, 0),
+        ClipsDescendants = true, ZIndex = 5,
+    })
+    self._contentArea = contentArea
+end
+
+-- ─── PROFILE SECTION ──────────────────────────────────────────
+function NexUI:_buildProfile(parent)
+    local T = self._theme
+    local c = Create("Frame", {
+        Parent = parent, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 12, 1, -74),
+        Size = UDim2.new(1, -24, 0, 58), ZIndex = 7,
+    })
+
+    local aBg = Create("Frame", {
+        Parent = c, BackgroundColor3 = T.GlassCard,
+        BackgroundTransparency = 0.5,
+        Position = UDim2.new(0, 0, 0.5, -20),
+        Size = UDim2.new(0, 40, 0, 40), ZIndex = 8,
+    })
+    self:_reg(aBg, "BackgroundColor3", "GlassCard")
+    Corner(aBg, 300)
+    local aStroke = Stroke(aBg, T.Stroke, 1.5, 0.5)
+    self:_reg(aStroke, "Color", "Stroke")
+
+    local aImg = Create("ImageLabel", {
+        Parent = aBg, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 2, 0, 2), Size = UDim2.new(1, -4, 1, -4),
+        Image = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. LocalPlayer.UserId .. "&width=420&height=420&format=png",
+        ZIndex = 9,
+    })
+    Corner(aImg, 300)
+
+    local nLbl = Create("TextLabel", {
+        Parent = c, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 50, 0, 8),
+        Size = UDim2.new(1, -50, 0, 20),
+        Font = Enum.Font.GothamBold, Text = "@" .. LocalPlayer.Name,
+        TextColor3 = T.Text, TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 8,
+    })
+    self:_reg(nLbl, "TextColor3", "Text")
+
+    local sRow = Create("Frame", {
+        Parent = c, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 50, 0, 30),
+        Size = UDim2.new(1, -50, 0, 14), ZIndex = 8,
+    })
+    local sDot = Create("Frame", {
+        Parent = sRow, BackgroundColor3 = T.Online,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, 0, 0.5, -3), Size = UDim2.new(0, 6, 0, 6), ZIndex = 9,
+    })
+    Corner(sDot, 300)
+    self:_reg(sDot, "BackgroundColor3", "Online")
+    Create("TextLabel", {
+        Parent = sRow, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 10, 0, 0), Size = UDim2.new(1, -10, 1, 0),
+        Font = Enum.Font.Gotham, Text = "Online",
+        TextColor3 = T.Online, TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 9,
+    })
+end
+
+-- ─── TOGGLE ───────────────────────────────────────────────────
+function NexUI:Toggle()
+    self._isOpen = not self._isOpen
+    if self._isOpen then
+        self._win.Visible = true
+        Tween(self._blur, {Size = 18}, 0.8)
+        Tween(self._win, {Size = UDim2.new(0, self._W, 0, self._H)}, 0.8)
+    else
+        Tween(self._blur, {Size = 0}, 0.6)
+        local t = Tween(self._win, {Size = UDim2.new(0, self._W, 0, 0)}, 0.6)
+        t.Completed:Connect(function()
+            if not self._isOpen then self._win.Visible = false end
+        end)
+    end
+end
+
+-- ─── TAB ──────────────────────────────────────────────────────
+function NexUI:Tab(name, iconId)
+    local T = self._theme
+
+    local page = Create("ScrollingFrame", {
+        Parent = self._contentArea, Name = name .. "Page",
+        BackgroundTransparency = 1, BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 1, 0),
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = T.Accent,
+        ScrollBarImageTransparency = 0.5,
+        ScrollingDirection = Enum.ScrollingDirection.Y,
+        Visible = false, ZIndex = 6, ClipsDescendants = true,
+    })
+    self:_reg(page, "ScrollBarImageColor3", "Accent")
+    local pageLayout = Create("UIListLayout", {
+        Parent = page, Padding = UDim.new(0, 12),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    })
+    Create("UIPadding", {
+        Parent = page,
+        PaddingLeft = UDim.new(0, 18), PaddingRight = UDim.new(0, 18),
+        PaddingTop = UDim.new(0, 18), PaddingBottom = UDim.new(0, 18),
+    })
+    pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        page.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 36)
+    end)
+
+    local idx = #self._tabs
+    local btn = Create("TextButton", {
+        Parent = self._tabsHolder, Name = name,
+        BackgroundTransparency = 1, BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0, 42), Font = Enum.Font.GothamBold,
+        Text = "", TextColor3 = T.TextSoft, TextSize = 14,
+        AutoButtonColor = false, LayoutOrder = idx,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 8,
+        ClipsDescendants = true,
+    })
+
+    local iconPad = iconId and 28 or 0
+    local btnText = Create("TextLabel", {
+        Parent = btn, BackgroundTransparency = 1,
+        Size = UDim2.new(1, -iconPad, 1, 0),
+        Position = UDim2.new(0, iconPad, 0, 0),
+        Text = name, Font = Enum.Font.GothamBold,
+        TextColor3 = T.TextSoft, TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 9,
+    })
+    self:_reg(btnText, "TextColor3", "TextSoft")
+
+    if iconId then
+        local icon = Create("ImageLabel", {
+            Parent = btn, BackgroundTransparency = 1,
+            Size = UDim2.new(0, 18, 0, 18),
+            Position = UDim2.new(0, 8, 0.5, -9),
+            Image = iconId, ImageColor3 = T.TextSoft, ZIndex = 9,
+        })
+        self:_reg(icon, "ImageColor3", "TextSoft")
+    end
+
+    -- Active indicator bar
+    local ind = Create("Frame", {
+        Parent = btn, BackgroundColor3 = T.Accent,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, -3, 0.5, -6),
+        Size = UDim2.new(0, 4, 0, 12),
+        BackgroundTransparency = 1, ZIndex = 9,
+    })
+    Corner(ind, 300)
+    self:_reg(ind, "BackgroundColor3", "Accent")
+
+    local hBg = Create("Frame", {
+        Parent = btn, BackgroundColor3 = T.GlassCard,
+        BackgroundTransparency = 1, BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 1, 0), ZIndex = 7,
+    })
+    Corner(hBg, 11)
+
+    local tabData = {Name = name, Button = btn, Text = btnText, Indicator = ind, Page = page, HoverBg = hBg}
+    table.insert(self._tabs, tabData)
+    local win = self
+
+    local function activate()
+        if win._currentTab == name then return end
+        for _, t in ipairs(win._tabs) do
+            if t.Name == win._currentTab then
+                Tween(t.Text, {TextColor3 = win._theme.TextSoft}, 0.35)
+                Tween(t.Indicator, {BackgroundTransparency = 1}, 0.28)
+                Tween(t.HoverBg, {BackgroundTransparency = 1}, 0.28)
+                t.Page.Visible = false
+            end
+        end
+        win._currentTab = name
+        Tween(btnText, {TextColor3 = win._theme.Text}, 0.35)
+        Tween(ind, {BackgroundTransparency = 0}, 0.28)
+        Tween(hBg, {BackgroundTransparency = 0.86}, 0.28)
+        page.CanvasPosition = Vector2.new(0, 0)
+        page.Visible = true
+        page.Position = UDim2.new(0, 20, 0, 0)
+        Tween(page, {Position = UDim2.new(0, 0, 0, 0)}, 0.38)
+    end
+
+    btn.MouseEnter:Connect(function()
+        if win._currentTab ~= name then
+            Tween(btnText, {TextColor3 = win._theme.Text}, 0.18, Enum.EasingStyle.Sine)
+            Tween(hBg, {BackgroundTransparency = 0.92}, 0.18, Enum.EasingStyle.Sine)
+        end
+    end)
+    btn.MouseLeave:Connect(function()
+        if win._currentTab ~= name then
+            Tween(btnText, {TextColor3 = win._theme.TextSoft}, 0.18, Enum.EasingStyle.Sine)
+            Tween(hBg, {BackgroundTransparency = 1}, 0.18, Enum.EasingStyle.Sine)
+        end
+    end)
+    btn.MouseButton1Click:Connect(activate)
+    ClickRipple(btn)
+
+    if #self._tabs == 1 then
+        win._currentTab = name
+        btnText.TextColor3 = T.Text
+        ind.BackgroundTransparency = 0
+        hBg.BackgroundTransparency = 0.86
+        page.Visible = true
+    end
+
+    local Tab = {}; Tab._page = page; Tab._win = win
+    function Tab:Section(sectionTitle) return win:_buildSection(page, sectionTitle) end
+    return Tab
+end
+
+-- ─── SECTION ──────────────────────────────────────────────────
+function NexUI:_buildSection(parent, sectionTitle)
+    local T = self._theme
+
+    local section = Create("Frame", {
+        Parent = parent, BackgroundColor3 = T.GlassCard,
+        BackgroundTransparency = 0.72, BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        LayoutOrder = #parent:GetChildren() + 1,
+        ZIndex = 7, ClipsDescendants = false,
+    })
+    self:_reg(section, "BackgroundColor3", "GlassCard")
+    Corner(section, 18)
+    local sStroke = Stroke(section, T.Stroke, 1, 0.5)
+    self:_reg(sStroke, "Color", "Stroke")
+
+    local accentBar = Create("Frame", {
+        Parent = section, BackgroundColor3 = T.Accent,
+        Position = UDim2.new(0, 16, 0, 14),
+        Size = UDim2.new(0, 3, 0, 18), ZIndex = 9,
+    })
+    self:_reg(accentBar, "BackgroundColor3", "Accent")
+    Corner(accentBar, 300)
+
+    local headerLbl = Create("TextLabel", {
+        Parent = section, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 28, 0, 0),
+        Size = UDim2.new(1, -42, 0, 46),
+        Font = Enum.Font.GothamBold, Text = sectionTitle,
+        TextColor3 = T.Text, TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 9,
+    })
+    self:_reg(headerLbl, "TextColor3", "Text")
+
+    -- Divider
+    local div = Create("Frame", {
+        Parent = section, BackgroundColor3 = T.Stroke,
+        BackgroundTransparency = 0.65, BorderSizePixel = 0,
+        Position = UDim2.new(0, 16, 0, 44), Size = UDim2.new(1, -32, 0, 1), ZIndex = 8,
+    })
+    self:_reg(div, "BackgroundColor3", "Stroke")
+
+    local content = Create("Frame", {
+        Parent = section, BackgroundTransparency = 1,
+        Position = UDim2.new(0, 12, 0, 50),
+        Size = UDim2.new(1, -24, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        ZIndex = 9, ClipsDescendants = false,
+    })
+    Create("UIListLayout", {
+        Parent = content, Padding = UDim.new(0, 8),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    })
+    Create("UIPadding", {Parent = content, PaddingBottom = UDim.new(0, 14)})
+
+    local Sec = {}; Sec._content = content
+    local win = self
+
+    -- ── Toggle ──
+    function Sec:Toggle(label, flagName, default, callback, bindKey)
+        local T2 = win._theme
+        local frame = Create("Frame", {
+            Parent = content, BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 38),
+            LayoutOrder = #content:GetChildren() + 1,
+        })
+        local lbl = Create("TextLabel", {
+            Parent = frame, BackgroundTransparency = 1,
+            Size = UDim2.new(1, bindKey and -108 or -60, 1, 0),
+            Font = Enum.Font.Gotham, Text = label,
+            TextColor3 = T2.Text, TextSize = 13,
+            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 10,
+        })
+        win:_reg(lbl, "TextColor3", "Text")
+
+        local enabled = default or false
+        win._flags[flagName] = enabled
+
+        -- Keybind chip (optional)
+        local BIND_ID = "$$kb_" .. flagName .. "$$"
+        if bindKey then
+            local kChip = Create("TextButton", {
+                Parent = frame, BackgroundColor3 = T2.GlassCard,
+                BackgroundTransparency = 0.4, BorderSizePixel = 0,
+                Position = UDim2.new(1, -106, 0.5, -12),
+                Size = UDim2.new(0, 40, 0, 24),
+                Font = Enum.Font.GothamBold,
+                Text = tostring(bindKey.Name):sub(1, 6),
+                TextColor3 = T2.TextSoft, TextSize = 10,
+                AutoButtonColor = false, ZIndex = 11,
+            })
+            Corner(kChip, 7)
+            Stroke(kChip, T2.Stroke, 1, 0.4)
+            local waiting = false
+            kChip.MouseButton1Click:Connect(function()
+                if waiting then return end; waiting = true
+                kChip.Text = "..."
+                local conn
+                conn = UserInputService.InputBegan:Connect(function(inp, gpe)
+                    if gpe then return end
+                    if inp.UserInputType ~= Enum.UserInputType.Keyboard then return end
+                    win:Unbind(bindKey, BIND_ID)
+                    bindKey = inp.KeyCode
+                    kChip.Text = tostring(bindKey.Name):sub(1, 6)
+                    win:Bind(bindKey, BIND_ID, function()
+                        enabled = not enabled
+                        win._flags[flagName] = enabled
+                        setEnabled(enabled)
+                    end)
+                    conn:Disconnect(); waiting = false
+                end)
+            end)
+            win:Bind(bindKey, BIND_ID, function()
+                enabled = not enabled
+                win._flags[flagName] = enabled
+                setEnabled(enabled)
+            end)
+        end
+
+        local track = Create("Frame", {
+            Parent = frame, BackgroundColor3 = enabled and T2.TrackOn or T2.TrackOff,
+            BorderSizePixel = 0,
+            Position = UDim2.new(1, -52, 0.5, -12), Size = UDim2.new(0, 48, 0, 24), ZIndex = 10,
+        })
+        Corner(track, 300)
+        local thumb = Create("Frame", {
+            Parent = track, BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BorderSizePixel = 0,
+            Position = enabled and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10),
+            Size = UDim2.new(0, 20, 0, 20), ZIndex = 11,
+        })
+        Corner(thumb, 300)
+
+        local debounce = false
+        function setEnabled(v)
+            enabled = v; win._flags[flagName] = v
+            Tween(track, {BackgroundColor3 = v and win._theme.TrackOn or win._theme.TrackOff}, 0.38, Enum.EasingStyle.Quart)
+            Tween(thumb, {Position = v and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)}, 0.38, Enum.EasingStyle.Quart)
+            if callback then task.spawn(callback, v) end
+        end
+
+        local clickBtn = Create("TextButton", {
+            Parent = frame, BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 1, 0), Text = "", ZIndex = 12,
+            AutoButtonColor = false,
+        })
+        clickBtn.MouseButton1Click:Connect(function()
+            if debounce then return end; debounce = true
+            setEnabled(not enabled)
+            task.wait(0.4); debounce = false
+        end)
+        ClickRipple(clickBtn)
+
+        return {
+            Set = setEnabled,
+            Get = function() return enabled end,
+        }
+    end
+
+    -- ── Slider ──
+    function Sec:Slider(label, min, max, default, callback)
+        local T2 = win._theme
+        local frame = Create("Frame", {
+            Parent = content, BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 54),
+            LayoutOrder = #content:GetChildren() + 1,
+        })
+        local nameLbl = Create("TextLabel", {
+            Parent = frame, BackgroundTransparency = 1,
+            Position = UDim2.new(0, 0, 0, 0), Size = UDim2.new(0.62, -4, 0, 20),
+            Font = Enum.Font.Gotham, Text = label,
+            TextColor3 = T2.TextMuted, TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 10,
+        })
+        win:_reg(nameLbl, "TextColor3", "TextMuted")
+        local valLbl = Create("TextLabel", {
+            Parent = frame, BackgroundTransparency = 1,
+            Position = UDim2.new(0.62, 0, 0, 0), Size = UDim2.new(0.38, 0, 0, 20),
+            Font = Enum.Font.GothamBold,
+            Text = string.format("%.2f", default),
+            TextColor3 = T2.Text, TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 10,
+        })
+        win:_reg(valLbl, "TextColor3", "Text")
+
+        local trackF = Create("Frame", {
+            Parent = frame, BackgroundColor3 = T2.TrackOff,
+            BorderSizePixel = 0,
+            Position = UDim2.new(0, 0, 0, 28), Size = UDim2.new(1, 0, 0, 6), ZIndex = 10,
+        })
+        win:_reg(trackF, "BackgroundColor3", "TrackOff")
+        Corner(trackF, 300)
+        local fillF = Create("Frame", {
+            Parent = trackF, BackgroundColor3 = T2.TrackOn,
+            BorderSizePixel = 0,
+            Size = UDim2.new((default - min) / (max - min), 0, 1, 0), ZIndex = 11,
+        })
+        win:_reg(fillF, "BackgroundColor3", "TrackOn")
+        Corner(fillF, 300)
+        local thumbF = Create("Frame", {
+            Parent = trackF, BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BorderSizePixel = 0,
+            Position = UDim2.new((default - min) / (max - min), -8, 0.5, -8),
+            Size = UDim2.new(0, 16, 0, 16), ZIndex = 12,
+        })
+        Corner(thumbF, 300)
+        Stroke(thumbF, T2.Accent, 2, 0.3)
+
+        local dragging = false
+        local function update(val)
+            local v = math.clamp(val, min, max)
+            local a = (v - min) / (max - min)
+            Tween(fillF, {Size = UDim2.new(a, 0, 1, 0)}, 0.05)
+            thumbF.Position = UDim2.new(a, -8, 0.5, -8)
+            valLbl.Text = string.format("%.2f", v)
+            if callback then callback(v) end
+        end
+        local function inputToVal(i)
+            return min + (max - min) * math.clamp(
+                (i.Position.X - trackF.AbsolutePosition.X) / math.max(trackF.AbsoluteSize.X, 1), 0, 1)
+        end
+        trackF.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true; update(inputToVal(i))
+            end
+        end)
+        thumbF.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end
+        end)
+        UserInputService.InputChanged:Connect(function(i)
+            if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+                update(inputToVal(i))
+            end
+        end)
+        UserInputService.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+        end)
+        return {Set = update}
+    end
+
+    -- ── TextBox ──
+    function Sec:TextBox(label, placeholder, default, callback)
+        local T2 = win._theme
+        local frame = Create("Frame", {
+            Parent = content, BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 38),
+            LayoutOrder = #content:GetChildren() + 1,
+        })
+        local lbl = Create("TextLabel", {
+            Parent = frame, BackgroundTransparency = 1,
+            Size = UDim2.new(0.4, -6, 1, 0),
+            Font = Enum.Font.Gotham, Text = label,
+            TextColor3 = T2.Text, TextSize = 13,
+            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 10,
+        })
+        win:_reg(lbl, "TextColor3", "Text")
+        local box = Create("TextBox", {
+            Parent = frame, BackgroundColor3 = T2.GlassCard,
+            BackgroundTransparency = 0.5, BorderSizePixel = 0,
+            Position = UDim2.new(0.4, 0, 0.5, -14),
+            Size = UDim2.new(0.6, 0, 0, 28),
+            Font = Enum.Font.Gotham,
+            PlaceholderText = placeholder,
+            PlaceholderColor3 = T2.TextMuted,
+            Text = default or "",
+            TextColor3 = T2.Text, TextSize = 12,
+            ZIndex = 10, ClearTextOnFocus = false,
+        })
+        win:_reg(box, "BackgroundColor3", "GlassCard")
+        win:_reg(box, "TextColor3", "Text")
+        Corner(box, 11)
+        local bStroke = Stroke(box, T2.Stroke, 1, 0.5)
+        box.Focused:Connect(function()
+            Tween(box, {BackgroundTransparency = 0.25}, 0.2, Enum.EasingStyle.Sine)
+            Tween(bStroke, {Transparency = 0, Color = T2.Accent}, 0.2)
+        end)
+        box.FocusLost:Connect(function()
+            Tween(box, {BackgroundTransparency = 0.5}, 0.2, Enum.EasingStyle.Sine)
+            Tween(bStroke, {Transparency = 0.5, Color = T2.Stroke}, 0.2)
+            if callback then callback(box.Text) end
+        end)
+        return {
+            Get = function() return box.Text end,
+            Set = function(v) box.Text = v end,
+        }
+    end
+
+    -- ── Keybind ──
+    function Sec:Keybind(label, defaultKey, callback)
+        local T2 = win._theme
+        local frame = Create("Frame", {
+            Parent = content, BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 38),
+            LayoutOrder = #content:GetChildren() + 1,
+        })
+        local lbl = Create("TextLabel", {
+            Parent = frame, BackgroundTransparency = 1,
+            Size = UDim2.new(1, -120, 1, 0),
+            Font = Enum.Font.Gotham, Text = label,
+            TextColor3 = T2.Text, TextSize = 13,
+            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 10,
+        })
+        win:_reg(lbl, "TextColor3", "Text")
+        local currentKey = defaultKey
+        local BIND_ID = "$$keybind_elem_" .. label .. "$$"
+        if callback then win:Bind(currentKey, BIND_ID, callback) end
+
+        local keyBtn = Create("TextButton", {
+            Parent = frame, BackgroundColor3 = T2.GlassCard,
+            BackgroundTransparency = 0.4, BorderSizePixel = 0,
+            Position = UDim2.new(1, -112, 0.5, -14),
+            Size = UDim2.new(0, 100, 0, 28),
+            Font = Enum.Font.GothamBold, Text = currentKey.Name,
+            TextColor3 = T2.Text, TextSize = 12,
+            AutoButtonColor = false, ZIndex = 10,
+        })
+        win:_reg(keyBtn, "BackgroundColor3", "GlassCard")
+        win:_reg(keyBtn, "TextColor3", "Text")
+        Corner(keyBtn, 11)
+        local kStroke = Stroke(keyBtn, T2.Accent, 1, 0.5)
+        ClickRipple(keyBtn)
+
+        local waiting = false
+        keyBtn.MouseButton1Click:Connect(function()
+            if waiting then return end; waiting = true
+            keyBtn.Text = "Press key..."
+            Tween(keyBtn, {BackgroundTransparency = 0.1}, 0.2)
+            Tween(kStroke, {Transparency = 0}, 0.2)
+            local conn
+            conn = UserInputService.InputBegan:Connect(function(input, gpe)
+                if gpe then return end
+                if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+                win:Unbind(currentKey, BIND_ID)
+                currentKey = input.KeyCode
+                keyBtn.Text = currentKey.Name
+                if callback then win:Bind(currentKey, BIND_ID, callback) end
+                conn:Disconnect(); waiting = false
+                Tween(keyBtn, {BackgroundTransparency = 0.4}, 0.2)
+            end)
+        end)
+
+        return {
+            Get = function() return currentKey end,
+            SetCallback = function(fn)
+                callback = fn
+                if callback then win:Bind(currentKey, BIND_ID, callback) end
+            end,
+            Clear = function() win:Unbind(currentKey, BIND_ID); callback = nil end,
+        }
+    end
+
+    -- ── Dropdown ──
+    function Sec:Dropdown(label, options, default, callback)
+        local T2 = win._theme
+        local selected = default or options[1]
+        local open = false
+        local frame = Create("Frame", {
+            Parent = content, BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 36),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            LayoutOrder = #content:GetChildren() + 1,
+            ZIndex = 10, ClipsDescendants = false,
+        })
+        local header = Create("TextButton", {
+            Parent = frame, BackgroundColor3 = T2.GlassCard,
+            BackgroundTransparency = 0.45, BorderSizePixel = 0,
+            Size = UDim2.new(1, 0, 0, 34),
+            Font = Enum.Font.GothamBold,
+            Text = "  ▾  " .. selected,
+            TextColor3 = T2.Text, TextSize = 12,
+            AutoButtonColor = false, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 11,
+        })
+        win:_reg(header, "BackgroundColor3", "GlassCard")
+        win:_reg(header, "TextColor3", "Text")
+        Corner(header, 16)
+        Stroke(header, T2.Stroke, 1, 0.5)
+
+        local dropdown = Create("Frame", {
+            Parent = frame, BackgroundColor3 = T2.GlassCard,
+            BackgroundTransparency = 0.05, BorderSizePixel = 0,
+            Position = UDim2.new(0, 0, 0, 38),
+            Size = UDim2.new(1, 0, 0, 0),
+            Visible = false, ClipsDescendants = true, ZIndex = 50,
+        })
+        win:_reg(dropdown, "BackgroundColor3", "GlassCard")
+        Corner(dropdown, 16)
+        Stroke(dropdown, T2.Stroke, 1, 0.5)
+        Create("UIListLayout", {Parent = dropdown, Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder})
+        Create("UIPadding", {Parent = dropdown, PaddingTop = UDim.new(0, 5), PaddingBottom = UDim.new(0, 5), PaddingLeft = UDim.new(0, 5), PaddingRight = UDim.new(0, 5)})
+
+        local totalH = 10
+        for i, opt in ipairs(options) do
+            local isSel = opt == selected
+            local ob = Create("TextButton", {
+                Parent = dropdown, BackgroundColor3 = T2.GlassCard,
+                BackgroundTransparency = isSel and 0.3 or 0.85,
+                BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 28),
+                Font = Enum.Font.Gotham, Text = "  " .. opt,
+                TextColor3 = isSel and T2.Text or T2.TextSoft,
+                TextSize = 12, AutoButtonColor = false,
+                LayoutOrder = i, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 51,
+            })
+            Corner(ob, 11)
+            totalH = totalH + 30
+            ob.MouseEnter:Connect(function() Tween(ob, {BackgroundTransparency = 0.5}, 0.12, Enum.EasingStyle.Sine) end)
+            ob.MouseLeave:Connect(function() Tween(ob, {BackgroundTransparency = opt == selected and 0.3 or 0.85}, 0.12, Enum.EasingStyle.Sine) end)
+            ob.MouseButton1Click:Connect(function()
+                selected = opt
+                header.Text = "  ▾  " .. selected
+                if callback then task.spawn(callback, selected) end
+                Tween(dropdown, {Size = UDim2.new(1, 0, 0, 0)}, 0.22)
+                task.delay(0.24, function() dropdown.Visible = false end)
+                open = false
+            end)
+        end
+
+        header.MouseButton1Click:Connect(function()
+            open = not open
+            if open then
+                dropdown.Visible = true
+                dropdown.Size = UDim2.new(1, 0, 0, 0)
+                Tween(dropdown, {Size = UDim2.new(1, 0, 0, totalH)}, 0.28, Enum.EasingStyle.Quint)
+            else
+                Tween(dropdown, {Size = UDim2.new(1, 0, 0, 0)}, 0.22)
+                task.delay(0.24, function() dropdown.Visible = false end)
+            end
+        end)
+        return {Get = function() return selected end}
+    end
+
+    -- ── Button ──
+    function Sec:Button(label, callback)
+        local T2 = win._theme
+        local btn = Create("TextButton", {
+            Parent = content, BackgroundColor3 = T2.Accent,
+            BackgroundTransparency = 0.28, BorderSizePixel = 0,
+            Size = UDim2.new(1, 0, 0, 34),
+            Font = Enum.Font.GothamBold, Text = label,
+            TextColor3 = T2.Text, TextSize = 13,
+            AutoButtonColor = false,
+            LayoutOrder = #content:GetChildren() + 1, ZIndex = 10,
+        })
+        win:_reg(btn, "BackgroundColor3", "Accent")
+        win:_reg(btn, "TextColor3", "Text")
+        Corner(btn, 17)
+        btn.MouseEnter:Connect(function() Tween(btn, {BackgroundTransparency = 0.08}, 0.16, Enum.EasingStyle.Sine) end)
+        btn.MouseLeave:Connect(function() Tween(btn, {BackgroundTransparency = 0.28}, 0.16, Enum.EasingStyle.Sine) end)
+        btn.MouseButton1Click:Connect(function()
+            Tween(btn, {BackgroundTransparency = 0.6}, 0.07)
+            task.delay(0.1, function() Tween(btn, {BackgroundTransparency = 0.28}, 0.16) end)
+            if callback then task.spawn(callback) end
+        end)
+        ClickRipple(btn)
+    end
+
+    -- ── Label ──
+    function Sec:Label(text)
+        local T2 = win._theme
+        local lbl = Create("TextLabel", {
+            Parent = content, BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 20),
+            Font = Enum.Font.Gotham, Text = text,
+            TextColor3 = T2.TextMuted, TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            LayoutOrder = #content:GetChildren() + 1,
+            ZIndex = 10, TextWrapped = true,
+        })
+        win:_reg(lbl, "TextColor3", "TextMuted")
+        return {Set = function(v) lbl.Text = v end}
+    end
+
+    -- ── ColorPicker ──
+    function Sec:ColorPicker(label, default, callback)
+        local T2 = win._theme
+        local current = default or Color3.fromRGB(255, 80, 200)
+        local frame = Create("Frame", {
+            Parent = content, BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 38),
+            LayoutOrder = #content:GetChildren() + 1, ZIndex = 10, ClipsDescendants = false,
+        })
+        local lbl = Create("TextLabel", {
+            Parent = frame, BackgroundTransparency = 1,
+            Size = UDim2.new(1, -60, 1, 0),
+            Font = Enum.Font.Gotham, Text = label,
+            TextColor3 = T2.Text, TextSize = 13,
+            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 10,
+        })
+        win:_reg(lbl, "TextColor3", "Text")
+        local swatch = Create("TextButton", {
+            Parent = frame, BackgroundColor3 = current,
+            BorderSizePixel = 0,
+            Position = UDim2.new(1, -50, 0.5, -12),
+            Size = UDim2.new(0, 44, 0, 24),
+            Text = "", AutoButtonColor = false, ZIndex = 10,
+        })
+        Corner(swatch, 9)
+        Stroke(swatch, T2.Stroke, 1.5, 0.35)
+
+        local pickerOpen = false
+        local popup = Create("Frame", {
+            Parent = frame, BackgroundColor3 = T2.GlassCard,
+            BackgroundTransparency = 0.05, BorderSizePixel = 0,
+            Position = UDim2.new(1, -208, 0, 42),
+            Size = UDim2.new(0, 198, 0, 0),
+            Visible = false, ClipsDescendants = true, ZIndex = 60,
+        })
+        win:_reg(popup, "BackgroundColor3", "GlassCard")
+        Corner(popup, 13)
+        Stroke(popup, T2.Stroke, 1, 0.35)
+
+        local hueBar = Create("Frame", {
+            Parent = popup, BackgroundTransparency = 0,
+            BorderSizePixel = 0,
+            Position = UDim2.new(0, 8, 0, 8),
+            Size = UDim2.new(1, -16, 0, 18), ZIndex = 61,
+        })
+        Corner(hueBar, 9)
+        Create("UIGradient", {
+            Parent = hueBar,
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0,     Color3.fromRGB(255, 0,   0)),
+                ColorSequenceKeypoint.new(1 / 6, Color3.fromRGB(255, 255, 0)),
+                ColorSequenceKeypoint.new(2 / 6, Color3.fromRGB(0,   255, 0)),
+                ColorSequenceKeypoint.new(3 / 6, Color3.fromRGB(0,   255, 255)),
+                ColorSequenceKeypoint.new(4 / 6, Color3.fromRGB(0,   0,   255)),
+                ColorSequenceKeypoint.new(5 / 6, Color3.fromRGB(255, 0,   255)),
+                ColorSequenceKeypoint.new(1,     Color3.fromRGB(255, 0,   0)),
+            }),
+        })
+        local hv, _, _ = Color3.toHSV(current)
+        local hueThumb = Create("Frame", {
+            Parent = hueBar, BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BorderSizePixel = 0,
+            Position = UDim2.new(hv, -5, 0.5, -9),
+            Size = UDim2.new(0, 10, 0, 18), ZIndex = 62,
+        })
+        Corner(hueThumb, 300)
+        Stroke(hueThumb, T2.Stroke, 1, 0.3)
+
+        local hexBox = Create("TextBox", {
+            Parent = popup, BackgroundColor3 = T2.GlassCard,
+            BackgroundTransparency = 0.5, BorderSizePixel = 0,
+            Position = UDim2.new(0, 8, 0, 34),
+            Size = UDim2.new(1, -16, 0, 26),
+            Font = Enum.Font.GothamBold,
+            Text = string.format("#%02X%02X%02X", math.floor(current.R * 255), math.floor(current.G * 255), math.floor(current.B * 255)),
+            TextColor3 = T2.Text, TextSize = 12,
+            ZIndex = 61, ClearTextOnFocus = false,
+        })
+        win:_reg(hexBox, "BackgroundColor3", "GlassCard")
+        win:_reg(hexBox, "TextColor3", "Text")
+        Corner(hexBox, 9)
+
+        local function applyColor(c)
+            current = c; swatch.BackgroundColor3 = c
+            local h2 = Color3.toHSV(c)
+            hueThumb.Position = UDim2.new(h2, -5, 0.5, -9)
+            hexBox.Text = string.format("#%02X%02X%02X", math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255))
+            if callback then task.spawn(callback, c) end
+        end
+
+        local hDrag = false
+        hueBar.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 then
+                hDrag = true
+                applyColor(Color3.fromHSV(math.clamp((i.Position.X - hueBar.AbsolutePosition.X) / math.max(hueBar.AbsoluteSize.X, 1), 0, 1), 1, 1))
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(i)
+            if hDrag and i.UserInputType == Enum.UserInputType.MouseMovement then
+                applyColor(Color3.fromHSV(math.clamp((i.Position.X - hueBar.AbsolutePosition.X) / math.max(hueBar.AbsoluteSize.X, 1), 0, 1), 1, 1))
+            end
+        end)
+        UserInputService.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 then hDrag = false end
+        end)
+        hexBox.FocusLost:Connect(function()
+            local hex = hexBox.Text:gsub("#", "")
+            if #hex == 6 then
+                local r, g, b = tonumber(hex:sub(1, 2), 16), tonumber(hex:sub(3, 4), 16), tonumber(hex:sub(5, 6), 16)
+                if r and g and b then applyColor(Color3.fromRGB(r, g, b)) end
+            end
+        end)
+        swatch.MouseButton1Click:Connect(function()
+            pickerOpen = not pickerOpen
+            if pickerOpen then
+                popup.Visible = true; popup.Size = UDim2.new(0, 198, 0, 0)
+                Tween(popup, {Size = UDim2.new(0, 198, 0, 72)}, 0.28, Enum.EasingStyle.Quint)
+            else
+                Tween(popup, {Size = UDim2.new(0, 198, 0, 0)}, 0.22)
+                task.delay(0.24, function() popup.Visible = false end)
+            end
+        end)
+        return {Get = function() return current end, Set = applyColor}
+    end
+
+    return Sec
+end
+
+-- ─── DESTROY ──────────────────────────────────────────────────
+function NexUI:Destroy()
+    if self._inputConn then self._inputConn:Disconnect() end
+    if self._gui       then self._gui:Destroy() end
+    if self._wmGui     then self._wmGui:Destroy() end
+    if self._toastGui  then self._toastGui:Destroy() end
+    if self._blur      then self._blur:Destroy() end
+    table.clear(self._keybinds)
+    table.clear(self._themeReg)
+    table.clear(self._accentLinks)
+end
+
+return NexUI
