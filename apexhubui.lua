@@ -91,8 +91,11 @@ local function Create(Class, Props)
 end
 
 local function Tween(obj, props, dur, style, dir)
-    local t = TweenService:Create(obj,
-        TweenInfo.new(dur or 0.5, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out), props)
+    if typeof(props) == "TweenInfo" then
+        props, dur = dur, props
+    end
+    local info = (typeof(dur) == "TweenInfo") and dur or TweenInfo.new(dur or 0.5, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out)
+    local t = TweenService:Create(obj, info, props)
     t:Play(); return t
 end
 
@@ -1229,6 +1232,27 @@ function NexUI:_buildSection(parent, sectionTitle)
         local enabled = default or false
         win._flags[flagName] = enabled
 
+        local track = Create("Frame", {
+            Parent = frame, BackgroundColor3 = enabled and T2.TrackOn or T2.TrackOff,
+            BorderSizePixel = 0,
+            Position = UDim2.new(1, -52, 0.5, -12), Size = UDim2.new(0, 48, 0, 24), ZIndex = 10,
+        })
+        Corner(track, 300)
+        local thumb = Create("Frame", {
+            Parent = track, BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BorderSizePixel = 0,
+            Position = enabled and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10),
+            Size = UDim2.new(0, 20, 0, 20), ZIndex = 11,
+        })
+        Corner(thumb, 300)
+
+        local function setEnabled(v)
+            enabled = v; win._flags[flagName] = v
+            Tween(track, {BackgroundColor3 = v and win._theme.TrackOn or win._theme.TrackOff}, 0.38, Enum.EasingStyle.Quart)
+            Tween(thumb, {Position = v and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)}, 0.38, Enum.EasingStyle.Quart)
+            if callback then task.spawn(callback, v) end
+        end
+
         -- Keybind chip (optional)
         local BIND_ID = "$$kb_" .. flagName .. "$$"
         if bindKey then
@@ -1270,28 +1294,7 @@ function NexUI:_buildSection(parent, sectionTitle)
             end)
         end
 
-        local track = Create("Frame", {
-            Parent = frame, BackgroundColor3 = enabled and T2.TrackOn or T2.TrackOff,
-            BorderSizePixel = 0,
-            Position = UDim2.new(1, -52, 0.5, -12), Size = UDim2.new(0, 48, 0, 24), ZIndex = 10,
-        })
-        Corner(track, 300)
-        local thumb = Create("Frame", {
-            Parent = track, BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            BorderSizePixel = 0,
-            Position = enabled and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10),
-            Size = UDim2.new(0, 20, 0, 20), ZIndex = 11,
-        })
-        Corner(thumb, 300)
-
         local debounce = false
-        function setEnabled(v)
-            enabled = v; win._flags[flagName] = v
-            Tween(track, {BackgroundColor3 = v and win._theme.TrackOn or win._theme.TrackOff}, 0.38, Enum.EasingStyle.Quart)
-            Tween(thumb, {Position = v and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)}, 0.38, Enum.EasingStyle.Quart)
-            if callback then task.spawn(callback, v) end
-        end
-
         local clickBtn = Create("TextButton", {
             Parent = frame, BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 1, 0), Text = "", ZIndex = 12,
