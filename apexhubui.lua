@@ -1,8 +1,9 @@
 -- ============================================================
--- NexUI_Lib.lua  v1.1
+-- NexUI_Lib.lua  v1.2
 -- Merged from PortalVisuals_Lib + UwU Premium AP
 -- Structure: Portal Visuals | Visuals/Toasts: UwU Premium
--- Fixed window clipping (CanvasGroup) & removed unicode artifacts.
+-- Fixed window clipping (CanvasGroup), removed unicode artifacts, 
+-- fixed keybind input handling, added Ghost (transparent) theme.
 -- ============================================================
 
 local Players           = game:GetService("Players")
@@ -26,9 +27,9 @@ local _lib = _G._NexUI
 -- ─────────────────────────────────────────────────────────────
 local Themes = {
     Dark = {
-        GlassBg   = Color3.fromRGB(14, 16, 22),
-        GlassLeft = Color3.fromRGB(20, 22, 32),
-        GlassCard = Color3.fromRGB(28, 31, 44),
+        GlassBg   = Color3.fromRGB(14, 16, 22), GlassBgT = 0.06,
+        GlassLeft = Color3.fromRGB(20, 22, 32), GlassLeftT = 0.85,
+        GlassCard = Color3.fromRGB(28, 31, 44), GlassCardT = 0.72,
         Accent    = Color3.fromRGB(120, 80, 255),
         Accent2   = Color3.fromRGB(170, 110, 255),
         Text      = Color3.fromRGB(240, 245, 255),
@@ -43,9 +44,9 @@ local Themes = {
         Danger    = Color3.fromRGB(215, 65, 65),
     },
     Midnight = {
-        GlassBg   = Color3.fromRGB(6, 8, 18),
-        GlassLeft = Color3.fromRGB(10, 12, 26),
-        GlassCard = Color3.fromRGB(18, 20, 36),
+        GlassBg   = Color3.fromRGB(6, 8, 18), GlassBgT = 0.06,
+        GlassLeft = Color3.fromRGB(10, 12, 26), GlassLeftT = 0.85,
+        GlassCard = Color3.fromRGB(18, 20, 36), GlassCardT = 0.72,
         Accent    = Color3.fromRGB(0, 180, 255),
         Accent2   = Color3.fromRGB(60, 220, 255),
         Text      = Color3.fromRGB(220, 235, 255),
@@ -60,9 +61,9 @@ local Themes = {
         Danger    = Color3.fromRGB(215, 65, 65),
     },
     Amethyst = {
-        GlassBg   = Color3.fromRGB(16, 12, 28),
-        GlassLeft = Color3.fromRGB(22, 16, 40),
-        GlassCard = Color3.fromRGB(34, 24, 60),
+        GlassBg   = Color3.fromRGB(16, 12, 28), GlassBgT = 0.06,
+        GlassLeft = Color3.fromRGB(22, 16, 40), GlassLeftT = 0.85,
+        GlassCard = Color3.fromRGB(34, 24, 60), GlassCardT = 0.72,
         Accent    = Color3.fromRGB(160, 80, 230),
         Accent2   = Color3.fromRGB(210, 130, 255),
         Text      = Color3.fromRGB(240, 230, 255),
@@ -73,6 +74,23 @@ local Themes = {
         TrackOn   = Color3.fromRGB(160, 80, 230),
         Stroke    = Color3.fromRGB(60, 40, 100),
         Shine     = Color3.fromRGB(220, 190, 255),
+        Warn      = Color3.fromRGB(200, 140, 25),
+        Danger    = Color3.fromRGB(215, 65, 65),
+    },
+    Ghost = {
+        GlassBg   = Color3.fromRGB(20, 20, 25), GlassBgT = 0.5,
+        GlassLeft = Color3.fromRGB(20, 20, 25), GlassLeftT = 0.6,
+        GlassCard = Color3.fromRGB(40, 40, 50), GlassCardT = 0.75,
+        Accent    = Color3.fromRGB(255, 255, 255),
+        Accent2   = Color3.fromRGB(180, 180, 180),
+        Text      = Color3.fromRGB(255, 255, 255),
+        TextSoft  = Color3.fromRGB(200, 200, 200),
+        TextMuted = Color3.fromRGB(150, 150, 150),
+        Online    = Color3.fromRGB(0, 255, 128),
+        TrackOff  = Color3.fromRGB(50, 50, 50),
+        TrackOn   = Color3.fromRGB(255, 255, 255),
+        Stroke    = Color3.fromRGB(80, 80, 80),
+        Shine     = Color3.fromRGB(255, 255, 255),
         Warn      = Color3.fromRGB(200, 140, 25),
         Danger    = Color3.fromRGB(215, 65, 65),
     },
@@ -164,6 +182,8 @@ function NexUI.new(title, options)
     self._accentLinks = {}
     self._rainbowMode = false
     self._toastCount  = 0
+    self._isBinding   = false
+    self._bindingCallback = nil
 
     -- Root GUI
     self._gui = Create("ScreenGui", {
@@ -190,8 +210,20 @@ function NexUI.new(title, options)
     self:Bind(menuKey, "$$menu$$", function() self:Toggle() end)
 
     self._inputConn = UserInputService.InputBegan:Connect(function(input, gpe)
+        -- Intercept binding state
+        if self._isBinding then
+            if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode ~= Enum.KeyCode.Unknown then
+                local cb = self._bindingCallback
+                self._isBinding = false
+                self._bindingCallback = nil
+                if cb then cb(input.KeyCode) end
+            end
+            return
+        end
+        
         if gpe then return end
         if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+        
         local entry = self._keybinds[input.KeyCode]
         if entry then
             for _, cb in pairs(entry.callbacks) do task.spawn(cb) end
@@ -200,6 +232,11 @@ function NexUI.new(title, options)
 
     _lib._cleanup = function() self:Destroy() end
     return self
+end
+
+function NexUI:StartBinding(callback)
+    self._isBinding = true
+    self._bindingCallback = callback
 end
 
 -- ─── KEYBIND ENGINE ──────────────────────────────────────────
@@ -259,10 +296,11 @@ function NexUI:_buildWatermark(title)
     local card = Create("Frame", {
         Parent = wmGui, AnchorPoint = Vector2.new(0, 0),
         Position = UDim2.new(0, 8, 0, 6), Size = UDim2.new(0, 240, 0, 30),
-        BackgroundColor3 = T.GlassBg, BackgroundTransparency = 0.18,
+        BackgroundColor3 = T.GlassBg, BackgroundTransparency = T.GlassBgT + 0.1,
         BorderSizePixel = 0, ZIndex = 100,
     })
     self:_reg(card, "BackgroundColor3", "GlassBg")
+    self:_reg(card, "BackgroundTransparency", "GlassBgT")
     Corner(card, 10)
     local wStroke = Stroke(card, T.Stroke, 1, 0.5)
     self:_reg(wStroke, "Color", "Stroke")
@@ -366,11 +404,13 @@ function NexUI:Toast(title, body, duration, color)
 
     local pill = Create("Frame", {
         Parent = wrapper,
-        BackgroundColor3 = T.GlassCard, BackgroundTransparency = 0.04,
+        BackgroundColor3 = T.GlassCard, BackgroundTransparency = T.GlassCardT,
         BorderSizePixel = 0, Size = UDim2.new(1, 0, 1, 0),
         Position = UDim2.new(0, 340, 0, 0),
         ClipsDescendants = true, ZIndex = 210,
     })
+    self:_reg(pill, "BackgroundColor3", "GlassCard")
+    self:_reg(pill, "BackgroundTransparency", "GlassCardT")
     Corner(pill, 14)
     Stroke(pill, T.Stroke, 1, 0.4)
 
@@ -405,6 +445,7 @@ function NexUI:Toast(title, body, duration, color)
         TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 212,
     })
+    self:_reg(titleLbl, "TextColor3", "Text")
 
     local bodyLbl = Create("TextLabel", {
         Parent = pill, BackgroundTransparency = 1,
@@ -414,6 +455,7 @@ function NexUI:Toast(title, body, duration, color)
         TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 212,
     })
+    self:_reg(bodyLbl, "TextColor3", "TextSoft")
 
     -- Close button (Drawn X to prevent missing character boxes)
     local closeBtn = Create("TextButton", {
@@ -856,10 +898,9 @@ function NexUI:_buildMainWindow(title, subtitle)
     local T = self._theme
     local W, H = self._W, self._H
 
-    -- Changed to CanvasGroup to fix corner clipping (transparent squares at edges)
     local win = Create("CanvasGroup", {
         Name = "NexWin", Parent = self._gui,
-        BackgroundColor3 = T.GlassBg, BackgroundTransparency = 0.06,
+        BackgroundColor3 = T.GlassBg, BackgroundTransparency = T.GlassBgT,
         BorderSizePixel = 0,
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.new(0.5, 0, 0.5, 0),
@@ -871,6 +912,7 @@ function NexUI:_buildMainWindow(title, subtitle)
     local winStroke = Stroke(win, T.Stroke, 2, 0.4)
     self:_reg(winStroke, "Color", "Stroke")
     self:_reg(win, "BackgroundColor3", "GlassBg")
+    self:_reg(win, "BackgroundTransparency", "GlassBgT")
     self._win = win
 
     -- Glass shine
@@ -879,7 +921,7 @@ function NexUI:_buildMainWindow(title, subtitle)
         BackgroundTransparency = 0.93, BorderSizePixel = 0,
         Size = UDim2.new(1, 0, 0.42, 0), ZIndex = 3,
     })
-    Corner(shine, 22) -- Added corner to match window
+    Corner(shine, 22)
     Create("UIGradient", {
         Parent = shine, Rotation = 90,
         Transparency = NumberSequence.new({
@@ -892,10 +934,11 @@ function NexUI:_buildMainWindow(title, subtitle)
     -- Left sidebar
     local left = Create("Frame", {
         Parent = win, BackgroundColor3 = T.GlassLeft,
-        BackgroundTransparency = 0.85, BorderSizePixel = 0,
+        BackgroundTransparency = T.GlassLeftT, BorderSizePixel = 0,
         Size = UDim2.new(0, 228, 1, 0), ZIndex = 5,
     })
     self:_reg(left, "BackgroundColor3", "GlassLeft")
+    self:_reg(left, "BackgroundTransparency", "GlassLeftT")
 
     local sep = Create("Frame", {
         Parent = left, BackgroundColor3 = T.Stroke,
@@ -965,11 +1008,12 @@ function NexUI:_buildProfile(parent)
 
     local aBg = Create("Frame", {
         Parent = c, BackgroundColor3 = T.GlassCard,
-        BackgroundTransparency = 0.5,
+        BackgroundTransparency = T.GlassCardT + 0.1,
         Position = UDim2.new(0, 0, 0.5, -20),
         Size = UDim2.new(0, 40, 0, 40), ZIndex = 8,
     })
     self:_reg(aBg, "BackgroundColor3", "GlassCard")
+    self:_reg(aBg, "BackgroundTransparency", "GlassCardT")
     Corner(aBg, 300)
     local aStroke = Stroke(aBg, T.Stroke, 1.5, 0.5)
     self:_reg(aStroke, "Color", "Stroke")
@@ -1166,13 +1210,14 @@ function NexUI:_buildSection(parent, sectionTitle)
 
     local section = Create("Frame", {
         Parent = parent, BackgroundColor3 = T.GlassCard,
-        BackgroundTransparency = 0.72, BorderSizePixel = 0,
+        BackgroundTransparency = T.GlassCardT, BorderSizePixel = 0,
         Size = UDim2.new(1, 0, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y,
         LayoutOrder = #parent:GetChildren() + 1,
         ZIndex = 7, ClipsDescendants = false,
     })
     self:_reg(section, "BackgroundColor3", "GlassCard")
+    self:_reg(section, "BackgroundTransparency", "GlassCardT")
     Corner(section, 18)
     local sStroke = Stroke(section, T.Stroke, 1, 0.5)
     self:_reg(sStroke, "Color", "Stroke")
@@ -1265,7 +1310,7 @@ function NexUI:_buildSection(parent, sectionTitle)
         if bindKey then
             local kChip = Create("TextButton", {
                 Parent = frame, BackgroundColor3 = T2.GlassCard,
-                BackgroundTransparency = 0.4, BorderSizePixel = 0,
+                BackgroundTransparency = T2.GlassCardT, BorderSizePixel = 0,
                 Position = UDim2.new(1, -106, 0.5, -12),
                 Size = UDim2.new(0, 40, 0, 24),
                 Font = Enum.Font.GothamBold,
@@ -1273,27 +1318,28 @@ function NexUI:_buildSection(parent, sectionTitle)
                 TextColor3 = T2.TextSoft, TextSize = 10,
                 AutoButtonColor = false, ZIndex = 11,
             })
+            win:_reg(kChip, "BackgroundColor3", "GlassCard")
+            win:_reg(kChip, "BackgroundTransparency", "GlassCardT")
             Corner(kChip, 7)
             Stroke(kChip, T2.Stroke, 1, 0.4)
             local waiting = false
+            
             kChip.MouseButton1Click:Connect(function()
                 if waiting then return end; waiting = true
                 kChip.Text = "..."
-                local conn
-                conn = UserInputService.InputBegan:Connect(function(inp, gpe)
-                    if gpe then return end
-                    if inp.UserInputType ~= Enum.UserInputType.Keyboard then return end
+                win:StartBinding(function(newKey)
                     win:Unbind(bindKey, BIND_ID)
-                    bindKey = inp.KeyCode
+                    bindKey = newKey
                     kChip.Text = tostring(bindKey.Name):sub(1, 6)
                     win:Bind(bindKey, BIND_ID, function()
                         enabled = not enabled
                         win._flags[flagName] = enabled
                         setEnabled(enabled)
                     end)
-                    conn:Disconnect(); waiting = false
+                    waiting = false
                 end)
             end)
+            
             win:Bind(bindKey, BIND_ID, function()
                 enabled = not enabled
                 win._flags[flagName] = enabled
@@ -1419,7 +1465,7 @@ function NexUI:_buildSection(parent, sectionTitle)
         win:_reg(lbl, "TextColor3", "Text")
         local box = Create("TextBox", {
             Parent = frame, BackgroundColor3 = T2.GlassCard,
-            BackgroundTransparency = 0.5, BorderSizePixel = 0,
+            BackgroundTransparency = T2.GlassCardT, BorderSizePixel = 0,
             Position = UDim2.new(0.4, 0, 0.5, -14),
             Size = UDim2.new(0.6, 0, 0, 28),
             Font = Enum.Font.Gotham,
@@ -1430,15 +1476,16 @@ function NexUI:_buildSection(parent, sectionTitle)
             ZIndex = 10, ClearTextOnFocus = false,
         })
         win:_reg(box, "BackgroundColor3", "GlassCard")
+        win:_reg(box, "BackgroundTransparency", "GlassCardT")
         win:_reg(box, "TextColor3", "Text")
         Corner(box, 11)
         local bStroke = Stroke(box, T2.Stroke, 1, 0.5)
         box.Focused:Connect(function()
-            Tween(box, {BackgroundTransparency = 0.25}, 0.2, Enum.EasingStyle.Sine)
+            Tween(box, {BackgroundTransparency = math.max(T2.GlassCardT - 0.2, 0)}, 0.2, Enum.EasingStyle.Sine)
             Tween(bStroke, {Transparency = 0, Color = T2.Accent}, 0.2)
         end)
         box.FocusLost:Connect(function()
-            Tween(box, {BackgroundTransparency = 0.5}, 0.2, Enum.EasingStyle.Sine)
+            Tween(box, {BackgroundTransparency = T2.GlassCardT}, 0.2, Enum.EasingStyle.Sine)
             Tween(bStroke, {Transparency = 0.5, Color = T2.Stroke}, 0.2)
             if callback then callback(box.Text) end
         end)
@@ -1448,7 +1495,7 @@ function NexUI:_buildSection(parent, sectionTitle)
         }
     end
 
-    -- ── Keybind ──
+    -- ── Keybind ── (Fixed using centralized StartBinding)
     function Sec:Keybind(label, defaultKey, callback)
         local T2 = win._theme
         local frame = Create("Frame", {
@@ -1470,7 +1517,7 @@ function NexUI:_buildSection(parent, sectionTitle)
 
         local keyBtn = Create("TextButton", {
             Parent = frame, BackgroundColor3 = T2.GlassCard,
-            BackgroundTransparency = 0.4, BorderSizePixel = 0,
+            BackgroundTransparency = T2.GlassCardT, BorderSizePixel = 0,
             Position = UDim2.new(1, -112, 0.5, -14),
             Size = UDim2.new(0, 100, 0, 28),
             Font = Enum.Font.GothamBold, Text = currentKey.Name,
@@ -1478,6 +1525,7 @@ function NexUI:_buildSection(parent, sectionTitle)
             AutoButtonColor = false, ZIndex = 10,
         })
         win:_reg(keyBtn, "BackgroundColor3", "GlassCard")
+        win:_reg(keyBtn, "BackgroundTransparency", "GlassCardT")
         win:_reg(keyBtn, "TextColor3", "Text")
         Corner(keyBtn, 11)
         local kStroke = Stroke(keyBtn, T2.Accent, 1, 0.5)
@@ -1489,16 +1537,14 @@ function NexUI:_buildSection(parent, sectionTitle)
             keyBtn.Text = "Press key..."
             Tween(keyBtn, {BackgroundTransparency = 0.1}, 0.2)
             Tween(kStroke, {Transparency = 0}, 0.2)
-            local conn
-            conn = UserInputService.InputBegan:Connect(function(input, gpe)
-                if gpe then return end
-                if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+            
+            win:StartBinding(function(newKey)
                 win:Unbind(currentKey, BIND_ID)
-                currentKey = input.KeyCode
+                currentKey = newKey
                 keyBtn.Text = currentKey.Name
                 if callback then win:Bind(currentKey, BIND_ID, callback) end
-                conn:Disconnect(); waiting = false
-                Tween(keyBtn, {BackgroundTransparency = 0.4}, 0.2)
+                Tween(keyBtn, {BackgroundTransparency = T2.GlassCardT}, 0.2)
+                waiting = false
             end)
         end)
 
@@ -1526,12 +1572,13 @@ function NexUI:_buildSection(parent, sectionTitle)
         })
         local header = Create("TextButton", {
             Parent = frame, BackgroundColor3 = T2.GlassCard,
-            BackgroundTransparency = 0.45, BorderSizePixel = 0,
+            BackgroundTransparency = T2.GlassCardT, BorderSizePixel = 0,
             Size = UDim2.new(1, 0, 0, 34),
             Text = "",
             AutoButtonColor = false, ZIndex = 11,
         })
         win:_reg(header, "BackgroundColor3", "GlassCard")
+        win:_reg(header, "BackgroundTransparency", "GlassCardT")
         Corner(header, 16)
         Stroke(header, T2.Stroke, 1, 0.5)
 
@@ -1557,12 +1604,13 @@ function NexUI:_buildSection(parent, sectionTitle)
 
         local dropdown = Create("Frame", {
             Parent = frame, BackgroundColor3 = T2.GlassCard,
-            BackgroundTransparency = 0.05, BorderSizePixel = 0,
+            BackgroundTransparency = T2.GlassCardT, BorderSizePixel = 0,
             Position = UDim2.new(0, 0, 0, 38),
             Size = UDim2.new(1, 0, 0, 0),
             Visible = false, ClipsDescendants = true, ZIndex = 50,
         })
         win:_reg(dropdown, "BackgroundColor3", "GlassCard")
+        win:_reg(dropdown, "BackgroundTransparency", "GlassCardT")
         Corner(dropdown, 16)
         Stroke(dropdown, T2.Stroke, 1, 0.5)
         Create("UIListLayout", {Parent = dropdown, Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder})
@@ -1573,7 +1621,7 @@ function NexUI:_buildSection(parent, sectionTitle)
             local isSel = opt == selected
             local ob = Create("TextButton", {
                 Parent = dropdown, BackgroundColor3 = T2.GlassCard,
-                BackgroundTransparency = isSel and 0.3 or 0.85,
+                BackgroundTransparency = isSel and (T2.GlassCardT - 0.2) or (T2.GlassCardT + 0.1),
                 BorderSizePixel = 0, Size = UDim2.new(1, 0, 0, 28),
                 Font = Enum.Font.Gotham, Text = "  " .. opt,
                 TextColor3 = isSel and T2.Text or T2.TextSoft,
@@ -1582,8 +1630,8 @@ function NexUI:_buildSection(parent, sectionTitle)
             })
             Corner(ob, 11)
             totalH = totalH + 30
-            ob.MouseEnter:Connect(function() Tween(ob, {BackgroundTransparency = 0.5}, 0.12, Enum.EasingStyle.Sine) end)
-            ob.MouseLeave:Connect(function() Tween(ob, {BackgroundTransparency = opt == selected and 0.3 or 0.85}, 0.12, Enum.EasingStyle.Sine) end)
+            ob.MouseEnter:Connect(function() Tween(ob, {BackgroundTransparency = T2.GlassCardT - 0.3}, 0.12, Enum.EasingStyle.Sine) end)
+            ob.MouseLeave:Connect(function() Tween(ob, {BackgroundTransparency = isSel and (T2.GlassCardT - 0.2) or (T2.GlassCardT + 0.1)}, 0.12, Enum.EasingStyle.Sine) end)
             ob.MouseButton1Click:Connect(function()
                 selected = opt
                 headerLbl.Text = selected
@@ -1679,12 +1727,13 @@ function NexUI:_buildSection(parent, sectionTitle)
         local pickerOpen = false
         local popup = Create("Frame", {
             Parent = frame, BackgroundColor3 = T2.GlassCard,
-            BackgroundTransparency = 0.05, BorderSizePixel = 0,
+            BackgroundTransparency = T2.GlassCardT, BorderSizePixel = 0,
             Position = UDim2.new(1, -208, 0, 42),
             Size = UDim2.new(0, 198, 0, 0),
             Visible = false, ClipsDescendants = true, ZIndex = 60,
         })
         win:_reg(popup, "BackgroundColor3", "GlassCard")
+        win:_reg(popup, "BackgroundTransparency", "GlassCardT")
         Corner(popup, 13)
         Stroke(popup, T2.Stroke, 1, 0.35)
 
@@ -1719,7 +1768,7 @@ function NexUI:_buildSection(parent, sectionTitle)
 
         local hexBox = Create("TextBox", {
             Parent = popup, BackgroundColor3 = T2.GlassCard,
-            BackgroundTransparency = 0.5, BorderSizePixel = 0,
+            BackgroundTransparency = T2.GlassCardT, BorderSizePixel = 0,
             Position = UDim2.new(0, 8, 0, 34),
             Size = UDim2.new(1, -16, 0, 26),
             Font = Enum.Font.GothamBold,
@@ -1728,6 +1777,7 @@ function NexUI:_buildSection(parent, sectionTitle)
             ZIndex = 61, ClearTextOnFocus = false,
         })
         win:_reg(hexBox, "BackgroundColor3", "GlassCard")
+        win:_reg(hexBox, "BackgroundTransparency", "GlassCardT")
         win:_reg(hexBox, "TextColor3", "Text")
         Corner(hexBox, 9)
 
