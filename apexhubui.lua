@@ -1,5 +1,5 @@
 -- ============================================================
--- SAKURA UI LIBRARY (Standalone with Full Interface Tab)
+-- SAKURA UI LIBRARY v2.0 (with Full Interface Tab)
 -- ============================================================
 -- Usage:
 -- local Library = loadstring(game:HttpGet("YOUR_RAW_URL"))()
@@ -7,10 +7,12 @@
 -- main:load()
 -- 
 -- Interface tab is auto-created with:
--- - Appearance (Colors + Background)
--- - FPS/Ping overlay (simple text, no graphs)
+-- - Appearance (colors + custom background)
+-- - FPS/Ping overlay (simple text)
 -- - Keybinds list overlay
 -- - Profile save/load/delete
+-- - Minimize keybind
+-- - Sakura-style notifications
 -- ============================================================
 
 local UserInputService = cloneref(game:GetService('UserInputService'))
@@ -126,7 +128,8 @@ local Library = {
     _notif_opacity = 0.0,
     _keybind_list = {},
     _loaded = false,
-    _tab = 0
+    _tab = 0,
+    _background_image = nil
 }
 Library.__index = Library
 Library.Connections = Connections
@@ -137,7 +140,9 @@ function Library.new()
     return self
 end
 
--- Notification System
+-- ============================================================
+-- NOTIFICATION SYSTEM (Sakura style)
+-- ============================================================
 local NotificationHost = Instance.new("ScreenGui")
 NotificationHost.Name = "SakuraNotifications"
 NotificationHost.ResetOnSpawn = false
@@ -316,20 +321,25 @@ function Library:create_ui()
     Container.BorderSizePixel = 0
     Container.Parent = SakuraGui
 
-    local Background = Instance.new("ImageLabel")
-    Background.Name = "Background"
-    Background.Parent = Container
-    Background.Size = UDim2.new(1, 0, 1, 0)
-    Background.BackgroundTransparency = 1
-    Background.Image = ""
-    Background.ScaleType = Enum.ScaleType.Crop
-    Background.ZIndex = 0
-    Background.Visible = false
+    -- Background Image (full container, no corner cutoff)
+    local BackgroundImage = Instance.new("ImageLabel")
+    BackgroundImage.Name = "SakuraBackground"
+    BackgroundImage.Size = UDim2.new(1, 0, 1, 0)
+    BackgroundImage.Position = UDim2.new(0, 0, 0, 0)
+    BackgroundImage.BackgroundTransparency = 1
+    BackgroundImage.BorderSizePixel = 0
+    BackgroundImage.Image = ""
+    BackgroundImage.ScaleType = Enum.ScaleType.Crop
+    BackgroundImage.ZIndex = -1
+    BackgroundImage.Visible = false
+    BackgroundImage.Parent = Container
+    self._background_image = BackgroundImage
 
     local ContainerGradient = Instance.new("UIGradient")
     ContainerGradient.Color = Theme.Gradient
     ContainerGradient.Rotation = 90
     ContainerGradient.Parent = Container
+    table.insert(Library._elements, {obj = ContainerGradient, prop = "Color", tKey = "Gradient"})
 
     local UICorner = Instance.new('UICorner')
     UICorner.CornerRadius = UDim.new(0, 10)
@@ -340,6 +350,7 @@ function Library:create_ui()
     UIStroke.Transparency = 0.58
     UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     UIStroke.Parent = Container
+    table.insert(Library._elements, {obj = UIStroke, prop = "Color", tKey = "GroupStroke"})
 
     local Handler = Instance.new('Frame')
     Handler.BackgroundTransparency = 1
@@ -468,7 +479,6 @@ function Library:create_ui()
 
     self._ui = SakuraGui
     self._container = Container
-    self._background = Background
 
     local function on_drag(input, process)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -2014,6 +2024,9 @@ function Library:create_ui()
         return TabManager
     end
 
+    -- ============================================================
+    -- COLOR SYSTEM
+    -- ============================================================
     function self:SetColor(key, color)
         Theme[key] = color
         for _, element in ipairs(Library._elements) do
@@ -2035,19 +2048,6 @@ function Library:create_ui()
 
     function self:GetColor(key)
         return Theme[key]
-    end
-
-    function self:SetBackground(image, transparency)
-        if image and image ~= "" then
-            self._background.Image = image
-            self._background.Visible = true
-        else
-            self._background.Visible = false
-        end
-        if transparency ~= nil then
-            self._background.ImageTransparency = transparency
-        end
-        self:SaveConfig()
     end
 
     function self:SaveConfig()
@@ -2083,48 +2083,67 @@ function Library:create_ui()
         end)
     end
 
+    -- ============================================================
+    -- BACKGROUND SYSTEM (full container, no corner cutoff)
+    -- ============================================================
+    function self:SetBackgroundImage(source, transparency)
+        local bg = self._background_image
+        if not bg then return end
+        
+        if source and source ~= "" then
+            local CustomAsset = getcustomasset or getsynasset
+            local BackgroundFolder = 'Sakura/Backgrounds'
+            
+            if CustomAsset and not isfolder(BackgroundFolder) then
+                makefolder(BackgroundFolder)
+            end
+            
+            local function resolve(source)
+                if source == '' then return '' end
+                if source:match('^%d+$') then return 'rbxassetid://'..source end
+                if source:match('^rbx%a+://') then return source end
+                if not CustomAsset then return '' end
+                if not source:match('^https?://') then
+                    return (isfile(source) and CustomAsset(source)) or ''
+                end
+                
+                local extension = source:match('%.(%a%a%a%a?)[%?#]') or source:match('%.(%a%a%a%a?)$') or 'png'
+                local path = BackgroundFolder..'/'..source:gsub('%W', ''):sub(-48)..'.'..extension
+                
+                if not isfile(path) then
+                    local success, body = pcall(game.HttpGet, game, source, true)
+                    if not success then return '' end
+                    writefile(path, body)
+                end
+                return CustomAsset(path)
+            end
+            
+            bg.Image = resolve(source)
+            bg.Size = UDim2.new(1, 0, 1, 0)
+            bg.Position = UDim2.new(0, 0, 0, 0)
+            bg.ScaleType = Enum.ScaleType.Crop
+            bg.Visible = true
+        else
+            bg.Visible = false
+            bg.Image = ""
+        end
+        
+        if transparency ~= nil then
+            bg.ImageTransparency = transparency
+        end
+        
+        self._config._flags['Background_Image_Id'] = source or ""
+        self:SaveConfig()
+    end
+
+    -- ============================================================
+    -- BUILD INTERFACE TAB (FULL)
+    -- ============================================================
     function self:build_interface_tab()
         local InterfaceTab = self:create_tab('Interface', 'rbxassetid://94381583400007', 16, Color3.fromRGB(100, 100, 100), Color3.fromRGB(190, 190, 190))
 
         local Container = self._container
         local Handler = Container.Handler
-
-        local Custom_Asset = getcustomasset or getsynasset
-        local Background_Folder = 'Sakura/Backgrounds'
-
-        if Custom_Asset and not isfolder(Background_Folder) then
-            makefolder(Background_Folder)
-        end
-
-        local function resolve_background(source)
-            if source == '' then return '' end
-            if source:match('^%d+$') then return 'rbxassetid://'..source end
-            if source:match('^rbx%a+://') then return source end
-            if not Custom_Asset then return '' end
-            if not source:match('^https?://') then
-                return (isfile(source) and Custom_Asset(source)) or ''
-            end
-
-            local extension = source:match('%.(%a%a%a%a?)[%?#]')
-                           or source:match('%.(%a%a%a%a?)$')
-                           or 'png'
-            local path = Background_Folder..'/'..source:gsub('%W', ''):sub(-48)..'.'..extension
-
-            if not isfile(path) then
-                local success, body = pcall(game.HttpGet, game, source, true)
-                if not success then return '' end
-                writefile(path, body)
-            end
-            return Custom_Asset(path)
-        end
-
-        local function set_background_image(source)
-            local resolved = resolve_background(source)
-            self._background.Image = resolved
-            self._background.Size = UDim2.new(1, 0, 1, 0)
-            self._background.Position = UDim2.new(0, 0, 0, 0)
-            self._background.ScaleType = Enum.ScaleType.Crop
-        end
 
         local function find_module_frame(title)
             for _, object in self._ui:GetDescendants() do
@@ -2160,8 +2179,8 @@ function Library:create_ui()
             Reset.AutoButtonColor = false
             Reset.Text = 'Reset'
             Reset.Parent = Reset_Holder
-            table.insert(self._elements, {obj = Reset, prop = "BackgroundColor3", tKey = "Control"})
-            table.insert(self._elements, {obj = Reset, prop = "TextColor3", tKey = "Text"})
+            table.insert(Library._elements, {obj = Reset, prop = "BackgroundColor3", tKey = "Control"})
+            table.insert(Library._elements, {obj = Reset, prop = "TextColor3", tKey = "Text"})
 
             local ResetCorner = Instance.new('UICorner')
             ResetCorner.CornerRadius = UDim.new(0, 4)
@@ -2173,11 +2192,14 @@ function Library:create_ui()
             ResetStroke.Thickness = 1
             ResetStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
             ResetStroke.Parent = Reset
-            table.insert(self._elements, {obj = ResetStroke, prop = "Color", tKey = "GroupStroke"})
+            table.insert(Library._elements, {obj = ResetStroke, prop = "Color", tKey = "GroupStroke"})
 
             Reset.MouseButton1Click:Connect(on_click)
         end
 
+        -- ============================================================
+        -- CONFIGURATIONS (Profile save/load/delete)
+        -- ============================================================
         local config_module = InterfaceTab:create_module({
             title = 'Configurations',
             flag = 'UI_Config_System',
@@ -2283,6 +2305,9 @@ function Library:create_ui()
             end
         })
 
+        -- ============================================================
+        -- APPEARANCE (Colors)
+        -- ============================================================
         local color_module = InterfaceTab:create_module({
             title = 'Appearance',
             flag = 'Gui_Colors',
@@ -2558,7 +2583,7 @@ function Library:create_ui()
                 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
                 TitleLabel.TextYAlignment = Enum.TextYAlignment.Center
                 TitleLabel.Parent = Row
-                table.insert(self._elements, {obj = TitleLabel, prop = "TextColor3", tKey = "Text"})
+                table.insert(Library._elements, {obj = TitleLabel, prop = "TextColor3", tKey = "Text"})
 
                 local Swatch = Instance.new('TextButton')
                 Swatch.Name = 'Swatch'
@@ -2581,7 +2606,7 @@ function Library:create_ui()
                 SwatchStroke.Thickness = 1
                 SwatchStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
                 SwatchStroke.Parent = Swatch
-                table.insert(self._elements, {obj = SwatchStroke, prop = "Color", tKey = "GroupStroke"})
+                table.insert(Library._elements, {obj = SwatchStroke, prop = "Color", tKey = "GroupStroke"})
 
                 Swatch.MouseButton1Click:Connect(function() open_popup(target, Swatch) end)
                 Row.MouseButton1Click:Connect(function() open_popup(target, Swatch) end)
@@ -2621,14 +2646,17 @@ function Library:create_ui()
             if color_module._state then color_module:change_state(true) end
         end
 
+        -- ============================================================
+        -- BACKGROUND (Image presets + custom)
+        -- ============================================================
         local image_module = InterfaceTab:create_module({
             title = 'Background',
             flag = 'Background_Image',
             description = 'Pick the Image Background',
             section = 'right',
             callback = function(state)
-                if not self._background then return end
-                self._background.Visible = state
+                if not self._background_image then return end
+                self._background_image.Visible = state
             end,
         })
 
@@ -2637,6 +2665,7 @@ function Library:create_ui()
         local Asset_Input
 
         local Background_Presets = {
+            ['None'] = '',
             ['Preset 1'] = 'https://i.pinimg.com/736x/bd/12/a5/bd12a561f083960f6c1382c54f4df234.jpg',
             ['Preset 2'] = 'https://i.pinimg.com/736x/53/bd/84/53bd848d7ca43b57612117292d7ff979.jpg',
             ['Preset 3'] = 'https://i.pinimg.com/736x/db/26/c7/db26c713d48342bd15c0ee8f623e19c6.jpg',
@@ -2650,11 +2679,11 @@ function Library:create_ui()
             ['Preset 11'] = 'https://i.pinimg.com/1200x/ac/31/e3/ac31e3d45b625de96efe6712d4f3a3c2.jpg',
         }
 
-        local Preset_Options = {
-            'None',
-            'Preset 1','Preset 2','Preset 3','Preset 4','Preset 5','Preset 6',
-            'Preset 7','Preset 8','Preset 9','Preset 10','Preset 11',
-        }
+        local Preset_Options = {}
+        for name in pairs(Background_Presets) do
+            table.insert(Preset_Options, name)
+        end
+        table.sort(Preset_Options)
 
         local preset_dropdown = image_module:create_dropdown({
             title = 'Preset',
@@ -2666,7 +2695,7 @@ function Library:create_ui()
                 local name = (typeof(value) == 'string' and value) or (typeof(value) == 'table' and value.Name)
                 local source = (name and Background_Presets[name]) or ''
                 Background_Image_Id = source
-                set_background_image(source)
+                self:SetBackgroundImage(source)
                 if Asset_Input then Asset_Input.Text = source end
                 self._config._flags['Background_Image_Id'] = source
             end,
@@ -2680,8 +2709,8 @@ function Library:create_ui()
             value = 50,
             round_number = true,
             callback = function(value)
-                if not self._background then return end
-                self._background.ImageTransparency = value / 100
+                if not self._background_image then return end
+                self._background_image.ImageTransparency = value / 100
             end,
         })
 
@@ -2714,9 +2743,9 @@ function Library:create_ui()
             Input.ClipsDescendants = true
             Input.Text = Background_Image_Id
             Input.Parent = Row
-            table.insert(self._elements, {obj = Input, prop = "BackgroundColor3", tKey = "Control"})
-            table.insert(self._elements, {obj = Input, prop = "TextColor3", tKey = "Text"})
-            table.insert(self._elements, {obj = Input, prop = "PlaceholderColor3", tKey = "TextDim"})
+            table.insert(Library._elements, {obj = Input, prop = "BackgroundColor3", tKey = "Control"})
+            table.insert(Library._elements, {obj = Input, prop = "TextColor3", tKey = "Text"})
+            table.insert(Library._elements, {obj = Input, prop = "PlaceholderColor3", tKey = "TextDim"})
 
             Asset_Input = Input
 
@@ -2730,20 +2759,20 @@ function Library:create_ui()
             InputStroke.Thickness = 1
             InputStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
             InputStroke.Parent = Input
-            table.insert(self._elements, {obj = InputStroke, prop = "Color", tKey = "GroupStroke"})
+            table.insert(Library._elements, {obj = InputStroke, prop = "Color", tKey = "GroupStroke"})
 
             Input.FocusLost:Connect(function()
                 local source = Input.Text:match('^%s*(.-)%s*$')
                 Input.Text = source
                 Background_Image_Id = source
-                set_background_image(source)
+                self:SetBackgroundImage(source)
                 self._config._flags['Background_Image_Id'] = source
             end)
 
             build_reset_button(Options, 4, function()
                 Input.Text = ''
                 Background_Image_Id = ''
-                set_background_image('')
+                self:SetBackgroundImage('')
                 preset_dropdown:update('None')
                 transparency_slider:set_percentage(50)
                 self._config._flags['Background_Image_Id'] = ''
@@ -2757,6 +2786,9 @@ function Library:create_ui()
             end
         end
 
+        -- ============================================================
+        -- SETTINGS (FPS, Ping, Keybinds, Minimize)
+        -- ============================================================
         local settings_module = InterfaceTab:create_module({
             title = 'Settings',
             flag = 'UI_Settings',
@@ -2771,7 +2803,14 @@ function Library:create_ui()
             callback = function(state) end,
         })
 
-        -- Simple FPS text overlay (no graphs)
+        -- Minimize Keybind
+        settings_module:create_keybind_row({
+            title = 'Minimize Keybind',
+            flag = 'Minimize_Keybind',
+            callback = function() end
+        })
+
+        -- FPS Overlay (simple text)
         local FpsGui = Instance.new("ScreenGui")
         FpsGui.Name = "SakuraFPSOverlay"
         FpsGui.ResetOnSpawn = false
@@ -2780,7 +2819,7 @@ function Library:create_ui()
         FpsGui.Parent = CoreGui
 
         local FpsFrame = Instance.new("Frame")
-        FpsFrame.Size = UDim2.new(0, 100, 0, 30)
+        FpsFrame.Size = UDim2.new(0, 100, 0, 28)
         FpsFrame.Position = UDim2.new(0, 20, 0, 20)
         FpsFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
         FpsFrame.BackgroundTransparency = 0.2
@@ -2789,9 +2828,11 @@ function Library:create_ui()
         FpsFrame.Parent = FpsGui
 
         Instance.new("UICorner", FpsFrame).CornerRadius = UDim.new(0, 6)
-        Instance.new("UIStroke", FpsFrame).Color = Theme.GroupStroke
-        Instance.new("UIStroke", FpsFrame).Transparency = 0.5
-        Instance.new("UIStroke", FpsFrame).Thickness = 1
+        local FpsStroke = Instance.new("UIStroke")
+        FpsStroke.Color = Theme.GroupStroke
+        FpsStroke.Transparency = 0.5
+        FpsStroke.Thickness = 1
+        FpsStroke.Parent = FpsFrame
 
         local FpsLabel = Instance.new("TextLabel")
         FpsLabel.Size = UDim2.new(1, 0, 1, 0)
@@ -2803,7 +2844,7 @@ function Library:create_ui()
         FpsLabel.TextXAlignment = Enum.TextXAlignment.Center
         FpsLabel.Parent = FpsFrame
 
-        -- Simple Ping text overlay (no graphs)
+        -- Ping Overlay (simple text)
         local PingGui = Instance.new("ScreenGui")
         PingGui.Name = "SakuraPingOverlay"
         PingGui.ResetOnSpawn = false
@@ -2812,8 +2853,8 @@ function Library:create_ui()
         PingGui.Parent = CoreGui
 
         local PingFrame = Instance.new("Frame")
-        PingFrame.Size = UDim2.new(0, 100, 0, 30)
-        PingFrame.Position = UDim2.new(0, 20, 0, 58)
+        PingFrame.Size = UDim2.new(0, 100, 0, 28)
+        PingFrame.Position = UDim2.new(0, 20, 0, 56)
         PingFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
         PingFrame.BackgroundTransparency = 0.2
         PingFrame.BorderSizePixel = 0
@@ -2821,9 +2862,11 @@ function Library:create_ui()
         PingFrame.Parent = PingGui
 
         Instance.new("UICorner", PingFrame).CornerRadius = UDim.new(0, 6)
-        Instance.new("UIStroke", PingFrame).Color = Theme.GroupStroke
-        Instance.new("UIStroke", PingFrame).Transparency = 0.5
-        Instance.new("UIStroke", PingFrame).Thickness = 1
+        local PingStroke = Instance.new("UIStroke")
+        PingStroke.Color = Theme.GroupStroke
+        PingStroke.Transparency = 0.5
+        PingStroke.Thickness = 1
+        PingStroke.Parent = PingFrame
 
         local PingLabel = Instance.new("TextLabel")
         PingLabel.Size = UDim2.new(1, 0, 1, 0)
@@ -2835,7 +2878,7 @@ function Library:create_ui()
         PingLabel.TextXAlignment = Enum.TextXAlignment.Center
         PingLabel.Parent = PingFrame
 
-        -- FPS update loop
+        -- FPS update
         local fpsCount = 0
         local fpsTime = 0
         RunService.RenderStepped:Connect(function(dt)
@@ -2848,7 +2891,7 @@ function Library:create_ui()
             end
         end)
 
-        -- Ping update loop
+        -- Ping update
         RunService.Heartbeat:Connect(function()
             local ping = math.round(LocalPlayer:GetNetworkPing() * 1000)
             PingLabel.Text = "Ping: " .. ping .. "ms"
@@ -2889,9 +2932,11 @@ function Library:create_ui()
         KeybindFrame.Parent = KeybindOverlayGui
 
         Instance.new("UICorner", KeybindFrame).CornerRadius = UDim.new(0, 6)
-        Instance.new("UIStroke", KeybindFrame).Color = Theme.GroupStroke
-        Instance.new("UIStroke", KeybindFrame).Transparency = 0.5
-        Instance.new("UIStroke", KeybindFrame).Thickness = 1
+        local KeybindStroke = Instance.new("UIStroke")
+        KeybindStroke.Color = Theme.GroupStroke
+        KeybindStroke.Transparency = 0.5
+        KeybindStroke.Thickness = 1
+        KeybindStroke.Parent = KeybindFrame
 
         local header = Instance.new("Frame")
         header.Name = "Header"
@@ -2934,8 +2979,6 @@ function Library:create_ui()
         headerLabel.TextXAlignment = Enum.TextXAlignment.Left
         headerLabel.ZIndex = 3
         headerLabel.Parent = header
-
-        local keybindUpdateTimer = 0
 
         local function RefreshKeybindOverlay()
             for _, child in ipairs(KeybindFrame:GetChildren()) do
@@ -3016,16 +3059,24 @@ function Library:create_ui()
             end,
         })
 
-        set_background_image(Background_Image_Id)
+        -- Load saved background
+        self:SetBackgroundImage(Background_Image_Id)
         self:LoadConfig()
 
         return InterfaceTab
     end
 
-    function self:build_full_interface_tab()
-        return self:build_interface_tab()
+    -- ============================================================
+    -- KEYBIND SYSTEM (Minimize)
+    -- ============================================================
+    local function create_keybind_row_module()
+        -- This is already implemented in ModuleManager:create_keybind_row
+        -- Just expose it for external use
     end
 
+    -- ============================================================
+    -- FINAL SETUP
+    -- ============================================================
     self.Connections['library_visiblity'] = UserInputService.InputBegan:Connect(function(input, process)
         local custom = self._config._keybinds['Minimize_Keybind']
         if custom then
@@ -3052,6 +3103,14 @@ function Library:create_ui()
     end)
 
     return self
+end
+
+function Library:build_interface_tab()
+    return self:build_interface_tab()
+end
+
+function Library:SetBackgroundImage(source, transparency)
+    return self:SetBackgroundImage(source, transparency)
 end
 
 return Library
