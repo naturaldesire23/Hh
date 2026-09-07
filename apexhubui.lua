@@ -2802,14 +2802,6 @@ function Library:create_ui()
             flag = 'UI_Gui_Visible',
             callback = function(state) end,
         })
-
-        -- Minimize Keybind
-        settings_module:create_keybind_row({
-            title = 'Minimize Keybind',
-            flag = 'Minimize_Keybind',
-            callback = function() end
-        })
-
         -- FPS Overlay (simple text)
         local FpsGui = Instance.new("ScreenGui")
         FpsGui.Name = "SakuraFPSOverlay"
