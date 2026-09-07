@@ -3112,5 +3112,156 @@ end
 function Library:SetBackgroundImage(source, transparency)
     return self:SetBackgroundImage(source, transparency)
 end
+function ModuleManager:create_keybind_row(settings)
+    LayoutOrderModule = LayoutOrderModule + 1
 
+    if self._size == 0 then self._size = 11 end
+    self._size += 28
+
+    if ModuleManager._state then
+        Module.Size = UDim2.fromOffset(241, 93 + self._size)
+    end
+    Options.Size = UDim2.fromOffset(241, self._size)
+
+    local Row = Instance.new('Frame')
+    Row.Name = 'KeybindRow'
+    Row.Size = UDim2.new(0, 207, 0, 22)
+    Row.BackgroundTransparency = 1
+    Row.BorderSizePixel = 0
+    Row.LayoutOrder = LayoutOrderModule
+    Row.Parent = Options
+
+    local TitleLabel = Instance.new('TextLabel')
+    TitleLabel.Name = 'TitleLabel'
+    TitleLabel.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+    TitleLabel.TextSize = 12
+    TitleLabel.TextColor3 = Theme.Text
+    TitleLabel.Text = settings.title or 'Keybind'
+    TitleLabel.Size = UDim2.new(1, -46, 1, 0)
+    TitleLabel.Position = UDim2.new(0, 0, 0, 0)
+    TitleLabel.BackgroundTransparency = 1
+    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    TitleLabel.TextYAlignment = Enum.TextYAlignment.Center
+    TitleLabel.Parent = Row
+
+    local KeybindBox = Instance.new('TextButton')
+    KeybindBox.Name = 'KeybindBox'
+    KeybindBox.Size = UDim2.fromOffset(38, 16)
+    KeybindBox.AnchorPoint = Vector2.new(1, 0.5)
+    KeybindBox.Position = UDim2.new(1, 0, 0.5, 0)
+    KeybindBox.BackgroundColor3 = Theme.Control
+    KeybindBox.BorderSizePixel = 0
+    KeybindBox.AutoButtonColor = false
+    KeybindBox.Text = ''
+    KeybindBox.Parent = Row
+
+    local KeybindCorner = Instance.new('UICorner')
+    KeybindCorner.CornerRadius = UDim.new(0, 2)
+    KeybindCorner.Parent = KeybindBox
+
+    local KeybindStroke = Instance.new('UIStroke')
+    KeybindStroke.Color = Theme.GroupStroke
+    KeybindStroke.Transparency = 0.72
+    KeybindStroke.Thickness = 1
+    KeybindStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    KeybindStroke.Parent = KeybindBox
+
+    local KeybindLabel = Instance.new('TextLabel')
+    KeybindLabel.Name = 'KeybindLabel'
+    KeybindLabel.Size = UDim2.new(1, -4, 1, 0)
+    KeybindLabel.Position = UDim2.new(0, 2, 0, 0)
+    KeybindLabel.BackgroundTransparency = 1
+    KeybindLabel.TextColor3 = Theme.TextSoft
+    KeybindLabel.TextSize = 9
+    KeybindLabel.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+    KeybindLabel.Text = '...'
+    KeybindLabel.Parent = KeybindBox
+
+    local function resize_keybind_row()
+        local txt = KeybindLabel.Text
+        if txt == '...' then
+            KeybindBox.Size = UDim2.fromOffset(38, 16)
+            return
+        end
+        local fp = Instance.new('GetTextBoundsParams')
+        fp.Text = txt
+        fp.Font = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold)
+        fp.Size = 9
+        fp.Width = 10000
+        local fs = TextService:GetTextBoundsAsync(fp)
+        KeybindBox.Size = UDim2.fromOffset(math.max(38, fs.X + 12), 16)
+    end
+
+    if Library._config._keybinds[settings.flag] then
+        KeybindLabel.Text = string.gsub(tostring(Library._config._keybinds[settings.flag]), 'Enum.KeyCode.', '')
+        Library._keybind_list[settings.flag] = settings.title or "Keybind"
+    else
+        Library._keybind_list[settings.flag] = nil
+    end
+    resize_keybind_row()
+
+    Library._keybind_registry[settings.flag] = function(key)
+        if key then
+            KeybindLabel.Text = string.gsub(tostring(key), 'Enum.KeyCode.', '')
+            Library._keybind_list[settings.flag] = settings.title or "Keybind"
+        else
+            KeybindLabel.Text = '...'
+            Library._keybind_list[settings.flag] = nil
+        end
+        resize_keybind_row()
+    end
+
+    KeybindBox.MouseButton1Click:Connect(function()
+        if Library._choosing_keybind then return end
+        Library._choosing_keybind = true
+        KeybindLabel.Text = '...'
+        KeybindBox.Size = UDim2.fromOffset(38, 16)
+        KeybindBox.BackgroundColor3 = Theme.ControlHover
+
+        local function cancel_choose()
+            Library._choosing_keybind = false
+            KeybindBox.BackgroundColor3 = Theme.Control
+            if Library._config._keybinds[settings.flag] then
+                KeybindLabel.Text = string.gsub(tostring(Library._config._keybinds[settings.flag]), 'Enum.KeyCode.', '')
+            else
+                KeybindLabel.Text = '...'
+            end
+            resize_keybind_row()
+            if Connections['keybind_row_choose'] then
+                Connections['keybind_row_choose']:Disconnect()
+                Connections['keybind_row_choose'] = nil
+            end
+        end
+
+        Connections['keybind_row_choose'] = UserInputService.InputBegan:Connect(function(input, process)
+            if process then return end
+
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                local mousePos = UserInputService:GetMouseLocation()
+                local framePos = KeybindBox.AbsolutePosition
+                local frameSize = KeybindBox.AbsoluteSize
+                if mousePos.X < framePos.X or mousePos.X > framePos.X + frameSize.X or mousePos.Y < framePos.Y or mousePos.Y > framePos.Y + frameSize.Y then
+                    cancel_choose()
+                    return
+                end
+            end
+
+            if input.KeyCode == Enum.KeyCode.Unknown then return end
+
+            if input.KeyCode == Enum.KeyCode.Backspace then
+                Library._config._keybinds[settings.flag] = nil
+                if Library._keybind_registry[settings.flag] then
+                    Library._keybind_registry[settings.flag](nil)
+                end
+            else
+                Library._config._keybinds[settings.flag] = tostring(input.KeyCode)
+                if Library._keybind_registry[settings.flag] then
+                    Library._keybind_registry[settings.flag](tostring(input.KeyCode))
+                end
+            end
+
+            cancel_choose()
+        end)
+    end)
+end
 return Library
