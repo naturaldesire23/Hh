@@ -1,4 +1,4 @@
--- IceLib UI Library (Fully Functional)
+-- IceLib UI Library (Fully Functional - Fixed)
 local UserInputService = cloneref and cloneref(game:GetService('UserInputService')) or game:GetService('UserInputService')
 local TweenService = cloneref and cloneref(game:GetService('TweenService')) or game:GetService('TweenService')
 local HttpService = cloneref and cloneref(game:GetService('HttpService')) or game:GetService('HttpService')
@@ -45,6 +45,7 @@ local Connections = setmetatable({}, {
 
 local function convertStringToTable(inputString)
     local result = {}
+    if type(inputString) ~= "string" then return result end
     for value in string.gmatch(inputString, "([^,]+)") do
         local trimmedValue = value:match("^%s*(.-)%s*$")
         table.insert(result, trimmedValue)
@@ -53,6 +54,7 @@ local function convertStringToTable(inputString)
 end
 
 local function convertTableToString(inputTable)
+    if type(inputTable) ~= "table" then return "" end
     return table.concat(inputTable, ", ")
 end
 
@@ -295,14 +297,14 @@ end
 function Library:SetBackground(source, transparency)
     if not self._background then return end
     if source and source ~= '' then
-        self._background.Image = source
+        self._background.Image = tostring(source)
         self._background.Visible = true
         self._background.ImageTransparency = transparency or 0.5
         self._background.ScaleType = Enum.ScaleType.Crop
     else
         self._background.Visible = false
     end
-    self._config._flags['Background_Image'] = source or ''
+    self._config._flags['Background_Image'] = tostring(source or '')
     self._config._flags['Background_Transparency'] = transparency or 0.5
     Config:save(game.GameId, Library._config)
 end
@@ -1334,7 +1336,7 @@ function Library:create_ui()
                     local number_threshold = math.clamp(rounded_number, settings.minimum_value, settings.maximum_value)
 
                     Library._config._flags[settings.flag] = number_threshold
-                    Value.Text = number_threshold
+                    Value.Text = tostring(number_threshold)
 
                     TweenService:Create(Fill, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
                         Size = UDim2.fromOffset(slider_size, 6)
@@ -1476,10 +1478,11 @@ function Library:create_ui()
                     table.insert(self._elements, {obj = Box, prop = "PlaceholderColor3", tKey = "TextDim"})
                 end
 
+                -- FIX: Ensure Box.Text is always a string
                 if Library._config._flags[settings.flag] ~= nil then
-                    Box.Text = Library._config._flags[settings.flag]
+                    Box.Text = tostring(Library._config._flags[settings.flag])
                 else
-                    Box.Text = settings.value or ''
+                    Box.Text = tostring(settings.value or '')
                 end
 
                 local BoxCorner = Instance.new('UICorner')
@@ -1503,7 +1506,7 @@ function Library:create_ui()
                 end)
 
                 Library._flag_registry[settings.flag] = function(value)
-                    Box.Text = value or ''
+                    Box.Text = tostring(value or '')
                 end
 
                 return Box
