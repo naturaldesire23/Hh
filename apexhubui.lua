@@ -119,13 +119,14 @@ local Library = {
     _notif_opacity = 0.0,
     _keybind_list = {},
     _background = nil,
-    _container = nil
+    _container = nil,
+    _tab = 0
 }
 Library.__index = Library
 Library.Connections = Connections
 
 function Library.new()
-    local self = setmetatable({ _tab = 0 }, Library)
+    local self = setmetatable({ _tab = 0, _elements = {} }, Library)
     self:create_ui()
     return self
 end
@@ -291,43 +292,31 @@ function Library:rgbToHex(color)
     return string.format("#%02X%02X%02X", math.floor(color.R * 255), math.floor(color.G * 255), math.floor(color.B * 255))
 end
 
--- Background support functions
-local function resolve_background(source)
-    if source == '' then return '' end
-    if source:match('^%d+$') then return 'rbxassetid://'..source end
-    if source:match('^rbx%a+://') then return source end
-    if source:match('^https?://') then return source end
-    if isfile and isfile(source) then
-        if getcustomasset then return getcustomasset(source) end
-        if getsynasset then return getsynasset(source) end
-    end
-    return ''
-end
-
 function Library:SetBackground(source, transparency)
     if not self._background then return end
-    local resolved = resolve_background(source)
-    if resolved and resolved ~= '' then
-        self._background.Image = resolved
+    if source and source ~= '' then
+        self._background.Image = source
         self._background.Visible = true
         self._background.ImageTransparency = transparency or 0.5
         self._background.ScaleType = Enum.ScaleType.Crop
     else
         self._background.Visible = false
     end
-    self._config._flags['Background_Image'] = source
+    self._config._flags['Background_Image'] = source or ''
     self._config._flags['Background_Transparency'] = transparency or 0.5
     Config:save(game.GameId, Library._config)
 end
 
 function Library:SetColor(key, color)
     Theme[key] = color
-    for _, element in ipairs(self._elements) do
+    for _, element in ipairs(self._elements or {}) do
         if element.tKey == key then
             if element.stateKey ~= nil then
-                -- Skip state-based elements, handle separately
+                -- Skip state-based elements
             else
-                element.obj[element.prop] = color
+                pcall(function()
+                    element.obj[element.prop] = color
+                end)
             end
         end
     end
@@ -362,7 +351,6 @@ function Library:create_ui()
     Container.BorderSizePixel = 0
     Container.Parent = IceLibGui
 
-    -- Background Image (for custom backgrounds)
     local Background = Instance.new('ImageLabel')
     Background.Name = 'Background'
     Background.Size = UDim2.new(1, 0, 1, 0)
@@ -380,7 +368,6 @@ function Library:create_ui()
     BackgroundCorner.CornerRadius = UDim.new(0, 10)
     BackgroundCorner.Parent = Background
 
-    -- Main gradient
     local ContainerGradient = Instance.new("UIGradient")
     ContainerGradient.Color = ColorSequence.new{
         ColorSequenceKeypoint.new(0.00, Color3.fromRGB(92, 92, 92)),
@@ -390,7 +377,6 @@ function Library:create_ui()
     ContainerGradient.Rotation = 90
     ContainerGradient.Parent = Container
 
-    -- Shadow
     local ShadowHolder = Instance.new('Frame')
     ShadowHolder.Name = 'ShadowHolder'
     ShadowHolder.AnchorPoint = Container.AnchorPoint
@@ -457,7 +443,6 @@ function Library:create_ui()
     Handler.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     Handler.Parent = Container
 
-    -- Tabs
     local Tabs = Instance.new('ScrollingFrame')
     Tabs.ScrollBarImageTransparency = 1
     Tabs.ScrollBarThickness = 0
@@ -478,7 +463,6 @@ function Library:create_ui()
     UIListLayout_Tabs.SortOrder = Enum.SortOrder.LayoutOrder
     UIListLayout_Tabs.Parent = Tabs
 
-    -- Title
     local ClientName = Instance.new('TextLabel')
     ClientName.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.Heavy, Enum.FontStyle.Normal)
     ClientName.TextColor3 = Theme.Text
@@ -508,7 +492,6 @@ function Library:create_ui()
     Logo.ScaleType = Enum.ScaleType.Fit
     Logo.Parent = Handler
 
-    -- Pin indicator
     local Pin = Instance.new('Frame')
     Pin.Name = 'Pin'
     Pin.Position = UDim2.new(0, 18, 0, 79)
@@ -523,7 +506,6 @@ function Library:create_ui()
     PinCorner.CornerRadius = UDim.new(1, 0)
     PinCorner.Parent = Pin
 
-    -- Divider
     local Divider = Instance.new('Frame')
     Divider.Name = 'Divider'
     Divider.BackgroundTransparency = 0.65
@@ -535,12 +517,10 @@ function Library:create_ui()
     Divider.Parent = Handler
     table.insert(self._elements, {obj = Divider, prop = "BackgroundColor3", tKey = "Divider"})
 
-    -- Sections folder
     local Sections = Instance.new('Folder')
     Sections.Name = 'Sections'
     Sections.Parent = Handler
 
-    -- Minimize button
     local Minimize = Instance.new('TextButton')
     Minimize.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
     Minimize.TextColor3 = Color3.fromRGB(0, 0, 0)
@@ -556,7 +536,6 @@ function Library:create_ui()
     Minimize.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     Minimize.Parent = Handler
 
-    -- Search icon
     local Search = Instance.new('ImageButton')
     Search.Name = 'Search'
     Search.AutoButtonColor = false
@@ -577,8 +556,11 @@ function Library:create_ui()
     self._ui = IceLibGui
     self._container = Container
     self._background = Background
+    self._tabs = Tabs
+    self._sections = Sections
+    self._pin = Pin
+    self._handler = Handler
 
-    -- Drag functionality
     local function on_drag(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             self._dragging = true
@@ -652,14 +634,12 @@ function Library:create_ui()
             Size = UDim2.fromOffset(752, 479)
         }):Play()
 
-        -- Load saved background
         local saved_bg = self._config._flags['Background_Image']
         if saved_bg and saved_bg ~= '' then
             local trans = self._config._flags['Background_Transparency'] or 0.5
             self:SetBackground(saved_bg, trans)
         end
 
-        -- Load saved theme
         for key, color in pairs(DefaultTheme) do
             local saved = self._config._flags['Theme_'..key]
             if saved then
@@ -669,14 +649,14 @@ function Library:create_ui()
     end
 
     function self:update_tabs(tab)
-        for _, object in Tabs:GetChildren() do
+        for _, object in self._tabs:GetChildren() do
             if object.Name ~= 'Tab' then continue end
 
             if object == tab then
                 if object.BackgroundTransparency ~= 0.5 then
                     local offset = object.LayoutOrder * 42
 
-                    TweenService:Create(Pin, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                    TweenService:Create(self._pin, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
                         Position = UDim2.new(0, 18, 0, 79 + offset)
                     }):Play()
 
@@ -725,7 +705,7 @@ function Library:create_ui()
     end
 
     function self:update_sections(left_section, right_section)
-        for _, object in Sections:GetChildren() do
+        for _, object in self._sections:GetChildren() do
             if object == left_section or object == right_section then
                 object.Visible = true
             else
@@ -744,7 +724,7 @@ function Library:create_ui()
         font_params.Width = 10000
 
         local font_size = TextService:GetTextBoundsAsync(font_params)
-        local first_tab = not Tabs:FindFirstChild('Tab')
+        local first_tab = not self._tabs:FindFirstChild('Tab')
 
         local Tab = Instance.new('TextButton')
         Tab.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
@@ -758,7 +738,7 @@ function Library:create_ui()
         Tab.BorderSizePixel = 0
         Tab.TextSize = 14
         Tab.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-        Tab.Parent = Tabs
+        Tab.Parent = self._tabs
         Tab.LayoutOrder = self._tab
 
         local TabCorner = Instance.new('UICorner')
@@ -811,7 +791,7 @@ function Library:create_ui()
         LeftSection.BorderSizePixel = 0
         LeftSection.CanvasSize = UDim2.new(0, 0, 0.5, 0)
         LeftSection.Visible = false
-        LeftSection.Parent = Sections
+        LeftSection.Parent = self._sections
 
         local UIListLayout_L = Instance.new('UIListLayout')
         UIListLayout_L.Padding = UDim.new(0, 11)
@@ -837,7 +817,7 @@ function Library:create_ui()
         RightSection.BorderSizePixel = 0
         RightSection.CanvasSize = UDim2.new(0, 0, 0.5, 0)
         RightSection.Visible = false
-        RightSection.Parent = Sections
+        RightSection.Parent = self._sections
 
         local UIListLayout_R = Instance.new('UIListLayout')
         UIListLayout_R.Padding = UDim.new(0, 11)
@@ -849,7 +829,7 @@ function Library:create_ui()
         UIPadding_R.PaddingTop = UDim.new(0, 1)
         UIPadding_R.Parent = RightSection
 
-        self._tab += 1
+        self._tab = self._tab + 1
 
         if first_tab then
             self:update_tabs(Tab)
@@ -885,7 +865,9 @@ function Library:create_ui()
             Module.BorderSizePixel = 0
             Module.BackgroundColor3 = Theme.Group
             Module.Parent = settings.section
-            table.insert(self._elements, {obj = Module, prop = "BackgroundColor3", tKey = "Group"})
+            if self._elements then
+                table.insert(self._elements, {obj = Module, prop = "BackgroundColor3", tKey = "Group"})
+            end
 
             local UIListLayout_Mod = Instance.new('UIListLayout')
             UIListLayout_Mod.Padding = UDim.new(0, 2)
@@ -902,7 +884,9 @@ function Library:create_ui()
             ModuleStroke.Thickness = 1
             ModuleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
             ModuleStroke.Parent = Module
-            table.insert(self._elements, {obj = ModuleStroke, prop = "Color", tKey = "GroupStroke"})
+            if self._elements then
+                table.insert(self._elements, {obj = ModuleStroke, prop = "Color", tKey = "GroupStroke"})
+            end
 
             local Header = Instance.new('TextButton')
             Header.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
@@ -932,7 +916,9 @@ function Library:create_ui()
             ModuleName.BorderSizePixel = 0
             ModuleName.TextSize = 13
             ModuleName.Parent = Header
-            table.insert(self._elements, {obj = ModuleName, prop = "TextColor3", tKey = "Text"})
+            if self._elements then
+                table.insert(self._elements, {obj = ModuleName, prop = "TextColor3", tKey = "Text"})
+            end
 
             local Description = Instance.new('TextLabel')
             Description.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
@@ -948,7 +934,9 @@ function Library:create_ui()
             Description.BorderSizePixel = 0
             Description.TextSize = 10
             Description.Parent = Header
-            table.insert(self._elements, {obj = Description, prop = "TextColor3", tKey = "TextDim"})
+            if self._elements then
+                table.insert(self._elements, {obj = Description, prop = "TextColor3", tKey = "TextDim"})
+            end
 
             local Toggle = Instance.new('Frame')
             Toggle.Name = 'Toggle'
@@ -959,7 +947,9 @@ function Library:create_ui()
             Toggle.BorderSizePixel = 0
             Toggle.BackgroundColor3 = Theme.Control
             Toggle.Parent = Header
-            table.insert(self._elements, {obj = Toggle, prop = "BackgroundColor3", tKey = "Control", stateKey = false})
+            if self._elements then
+                table.insert(self._elements, {obj = Toggle, prop = "BackgroundColor3", tKey = "Control", stateKey = false})
+            end
 
             local ToggleCorner = Instance.new('UICorner')
             ToggleCorner.CornerRadius = UDim.new(1, 0)
@@ -974,7 +964,9 @@ function Library:create_ui()
             Circle.BorderSizePixel = 0
             Circle.BackgroundColor3 = Theme.TextDim
             Circle.Parent = Toggle
-            table.insert(self._elements, {obj = Circle, prop = "BackgroundColor3", tKey = "TextDim", stateKey = false})
+            if self._elements then
+                table.insert(self._elements, {obj = Circle, prop = "BackgroundColor3", tKey = "TextDim", stateKey = false})
+            end
 
             local CircleCorner = Instance.new('UICorner')
             CircleCorner.CornerRadius = UDim.new(1, 0)
@@ -990,7 +982,9 @@ function Library:create_ui()
             Divider.BorderSizePixel = 0
             Divider.BackgroundColor3 = Theme.Divider
             Divider.Parent = Header
-            table.insert(self._elements, {obj = Divider, prop = "BackgroundColor3", tKey = "Divider"})
+            if self._elements then
+                table.insert(self._elements, {obj = Divider, prop = "BackgroundColor3", tKey = "Divider"})
+            end
 
             local Divider2 = Instance.new('Frame')
             Divider2.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -1002,7 +996,9 @@ function Library:create_ui()
             Divider2.BorderSizePixel = 0
             Divider2.BackgroundColor3 = Theme.Divider
             Divider2.Parent = Header
-            table.insert(self._elements, {obj = Divider2, prop = "BackgroundColor3", tKey = "Divider"})
+            if self._elements then
+                table.insert(self._elements, {obj = Divider2, prop = "BackgroundColor3", tKey = "Divider"})
+            end
 
             local Options = Instance.new('Frame')
             Options.Name = 'Options'
@@ -1092,7 +1088,7 @@ function Library:create_ui()
                 local CheckboxManager = { _state = false }
 
                 if self._size == 0 then self._size = 11 end
-                self._size += 28
+                self._size = self._size + 28
 
                 if ModuleManager._state then
                     Module.Size = UDim2.fromOffset(241, 93 + self._size)
@@ -1121,7 +1117,9 @@ function Library:create_ui()
                 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
                 TitleLabel.TextYAlignment = Enum.TextYAlignment.Center
                 TitleLabel.Parent = Row
-                table.insert(self._elements, {obj = TitleLabel, prop = "TextColor3", tKey = "Text"})
+                if self._elements then
+                    table.insert(self._elements, {obj = TitleLabel, prop = "TextColor3", tKey = "Text"})
+                end
 
                 local Toggle = Instance.new("Frame")
                 Toggle.Name = "Toggle"
@@ -1131,7 +1129,9 @@ function Library:create_ui()
                 Toggle.BackgroundColor3 = Theme.Control
                 Toggle.BorderSizePixel = 0
                 Toggle.Parent = Row
-                table.insert(self._elements, {obj = Toggle, prop = "BackgroundColor3", tKey = "Control", stateKey = false})
+                if self._elements then
+                    table.insert(self._elements, {obj = Toggle, prop = "BackgroundColor3", tKey = "Control", stateKey = false})
+                end
 
                 local ToggleStroke = Instance.new("UIStroke")
                 ToggleStroke.Color = Theme.GroupStroke
@@ -1139,7 +1139,9 @@ function Library:create_ui()
                 ToggleStroke.Thickness = 1
                 ToggleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
                 ToggleStroke.Parent = Toggle
-                table.insert(self._elements, {obj = ToggleStroke, prop = "Color", tKey = "GroupStroke"})
+                if self._elements then
+                    table.insert(self._elements, {obj = ToggleStroke, prop = "Color", tKey = "GroupStroke"})
+                end
 
                 local ToggleCorner = Instance.new("UICorner")
                 ToggleCorner.CornerRadius = UDim.new(1, 0)
@@ -1153,7 +1155,9 @@ function Library:create_ui()
                 Knob.BackgroundColor3 = Theme.TextDim
                 Knob.BorderSizePixel = 0
                 Knob.Parent = Toggle
-                table.insert(self._elements, {obj = Knob, prop = "BackgroundColor3", tKey = "TextDim", stateKey = false})
+                if self._elements then
+                    table.insert(self._elements, {obj = Knob, prop = "BackgroundColor3", tKey = "TextDim", stateKey = false})
+                end
 
                 local KnobCorner = Instance.new("UICorner")
                 KnobCorner.CornerRadius = UDim.new(1, 0)
@@ -1207,7 +1211,7 @@ function Library:create_ui()
                 local SliderManager = {}
 
                 if self._size == 0 then self._size = 11 end
-                self._size += 40
+                self._size = self._size + 40
 
                 if ModuleManager._state then
                     Module.Size = UDim2.fromOffset(241, 93 + self._size)
@@ -1242,7 +1246,9 @@ function Library:create_ui()
                 TextLabel.BorderSizePixel = 0
                 TextLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
                 TextLabel.Parent = Slider
-                table.insert(self._elements, {obj = TextLabel, prop = "TextColor3", tKey = "Text"})
+                if self._elements then
+                    table.insert(self._elements, {obj = TextLabel, prop = "TextColor3", tKey = "Text"})
+                end
 
                 local Drag = Instance.new('Frame')
                 Drag.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -1254,7 +1260,9 @@ function Library:create_ui()
                 Drag.BorderSizePixel = 0
                 Drag.BackgroundColor3 = Theme.Group
                 Drag.Parent = Slider
-                table.insert(self._elements, {obj = Drag, prop = "BackgroundColor3", tKey = "Group"})
+                if self._elements then
+                    table.insert(self._elements, {obj = Drag, prop = "BackgroundColor3", tKey = "Group"})
+                end
 
                 local DragCorner = Instance.new('UICorner')
                 DragCorner.CornerRadius = UDim.new(1, 0)
@@ -1270,7 +1278,9 @@ function Library:create_ui()
                 Fill.BorderSizePixel = 0
                 Fill.BackgroundColor3 = Theme.Accent
                 Fill.Parent = Drag
-                table.insert(self._elements, {obj = Fill, prop = "BackgroundColor3", tKey = "Accent"})
+                if self._elements then
+                    table.insert(self._elements, {obj = Fill, prop = "BackgroundColor3", tKey = "Accent"})
+                end
 
                 local FillCorner = Instance.new('UICorner')
                 FillCorner.CornerRadius = UDim.new(0, 3)
@@ -1285,7 +1295,9 @@ function Library:create_ui()
                 Circle.BorderSizePixel = 0
                 Circle.BackgroundColor3 = Theme.Accent
                 Circle.Parent = Fill
-                table.insert(self._elements, {obj = Circle, prop = "BackgroundColor3", tKey = "Accent"})
+                if self._elements then
+                    table.insert(self._elements, {obj = Circle, prop = "BackgroundColor3", tKey = "Accent"})
+                end
 
                 local CircleCorner = Instance.new('UICorner')
                 CircleCorner.CornerRadius = UDim.new(1, 0)
@@ -1305,7 +1317,9 @@ function Library:create_ui()
                 Value.BorderSizePixel = 0
                 Value.TextSize = 10
                 Value.Parent = Slider
-                table.insert(self._elements, {obj = Value, prop = "TextColor3", tKey = "TextSoft"})
+                if self._elements then
+                    table.insert(self._elements, {obj = Value, prop = "TextColor3", tKey = "TextSoft"})
+                end
 
                 function SliderManager:set_percentage(percentage)
                     local rounded_number = 0
@@ -1373,7 +1387,7 @@ function Library:create_ui()
                 LayoutOrderModule = LayoutOrderModule + 1
 
                 if self._size == 0 then self._size = 11 end
-                self._size += 29
+                self._size = self._size + 29
 
                 if ModuleManager._state then
                     Module.Size = UDim2.fromOffset(241, 93 + self._size + self._multiplier)
@@ -1401,8 +1415,10 @@ function Library:create_ui()
                 Btn.AutoButtonColor = false
                 Btn.Text = settings.title
                 Btn.Parent = Holder
-                table.insert(self._elements, {obj = Btn, prop = "BackgroundColor3", tKey = "Control"})
-                table.insert(self._elements, {obj = Btn, prop = "TextColor3", tKey = "Text"})
+                if self._elements then
+                    table.insert(self._elements, {obj = Btn, prop = "BackgroundColor3", tKey = "Control"})
+                    table.insert(self._elements, {obj = Btn, prop = "TextColor3", tKey = "Text"})
+                end
 
                 local BtnCorner = Instance.new('UICorner')
                 BtnCorner.CornerRadius = UDim.new(0, 4)
@@ -1414,7 +1430,9 @@ function Library:create_ui()
                 BtnStroke.Thickness = 1
                 BtnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
                 BtnStroke.Parent = Btn
-                table.insert(self._elements, {obj = BtnStroke, prop = "Color", tKey = "GroupStroke"})
+                if self._elements then
+                    table.insert(self._elements, {obj = BtnStroke, prop = "Color", tKey = "GroupStroke"})
+                end
 
                 Btn.MouseButton1Click:Connect(settings.callback)
             end
@@ -1423,7 +1441,7 @@ function Library:create_ui()
                 LayoutOrderModule = LayoutOrderModule + 1
 
                 if self._size == 0 then self._size = 11 end
-                self._size += 29
+                self._size = self._size + 29
 
                 if ModuleManager._state then
                     Module.Size = UDim2.fromOffset(241, 93 + self._size + self._multiplier)
@@ -1452,9 +1470,11 @@ function Library:create_ui()
                 Box.PlaceholderColor3 = Theme.TextDim
                 Box.ClearTextOnFocus = false
                 Box.Parent = Holder
-                table.insert(self._elements, {obj = Box, prop = "BackgroundColor3", tKey = "Control"})
-                table.insert(self._elements, {obj = Box, prop = "TextColor3", tKey = "Text"})
-                table.insert(self._elements, {obj = Box, prop = "PlaceholderColor3", tKey = "TextDim"})
+                if self._elements then
+                    table.insert(self._elements, {obj = Box, prop = "BackgroundColor3", tKey = "Control"})
+                    table.insert(self._elements, {obj = Box, prop = "TextColor3", tKey = "Text"})
+                    table.insert(self._elements, {obj = Box, prop = "PlaceholderColor3", tKey = "TextDim"})
+                end
 
                 if Library._config._flags[settings.flag] ~= nil then
                     Box.Text = Library._config._flags[settings.flag]
@@ -1472,7 +1492,9 @@ function Library:create_ui()
                 BoxStroke.Thickness = 1
                 BoxStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
                 BoxStroke.Parent = Box
-                table.insert(self._elements, {obj = BoxStroke, prop = "Color", tKey = "GroupStroke"})
+                if self._elements then
+                    table.insert(self._elements, {obj = BoxStroke, prop = "Color", tKey = "GroupStroke"})
+                end
 
                 Box.FocusLost:Connect(function()
                     Library._config._flags[settings.flag] = Box.Text
@@ -1496,7 +1518,7 @@ function Library:create_ui()
 
                 if not settings.Order then
                     if self._size == 0 then self._size = 11 end
-                    self._size += 53
+                    self._size = self._size + 53
                 end
 
                 if not settings.Order then
@@ -1541,7 +1563,9 @@ function Library:create_ui()
                 TextLabel.TextXAlignment = Enum.TextXAlignment.Left
                 TextLabel.BorderSizePixel = 0
                 TextLabel.Parent = Dropdown
-                table.insert(self._elements, {obj = TextLabel, prop = "TextColor3", tKey = "Text"})
+                if self._elements then
+                    table.insert(self._elements, {obj = TextLabel, prop = "TextColor3", tKey = "Text"})
+                end
 
                 local Box = Instance.new('Frame')
                 Box.ClipsDescendants = true
@@ -1554,7 +1578,9 @@ function Library:create_ui()
                 Box.BorderSizePixel = 0
                 Box.BackgroundColor3 = Theme.Control
                 Box.Parent = TextLabel
-                table.insert(self._elements, {obj = Box, prop = "BackgroundColor3", tKey = "Control"})
+                if self._elements then
+                    table.insert(self._elements, {obj = Box, prop = "BackgroundColor3", tKey = "Control"})
+                end
 
                 local BoxCorner = Instance.new('UICorner')
                 BoxCorner.CornerRadius = UDim.new(0, 5)
@@ -1566,7 +1592,9 @@ function Library:create_ui()
                 BoxStroke.Thickness = 1
                 BoxStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
                 BoxStroke.Parent = Box
-                table.insert(self._elements, {obj = BoxStroke, prop = "Color", tKey = "GroupStroke"})
+                if self._elements then
+                    table.insert(self._elements, {obj = BoxStroke, prop = "Color", tKey = "GroupStroke"})
+                end
 
                 local Header = Instance.new('Frame')
                 Header.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -1591,7 +1619,9 @@ function Library:create_ui()
                 CurrentOption.BorderSizePixel = 0
                 CurrentOption.TextSize = 11
                 CurrentOption.Parent = Header
-                table.insert(self._elements, {obj = CurrentOption, prop = "TextColor3", tKey = "Text"})
+                if self._elements then
+                    table.insert(self._elements, {obj = CurrentOption, prop = "TextColor3", tKey = "Text"})
+                end
 
                 local Arrow = Instance.new('ImageLabel')
                 Arrow.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -1604,7 +1634,9 @@ function Library:create_ui()
                 Arrow.Size = UDim2.new(0, 9, 0, 9)
                 Arrow.BorderSizePixel = 0
                 Arrow.Parent = Header
-                table.insert(self._elements, {obj = Arrow, prop = "ImageColor3", tKey = "TextDim"})
+                if self._elements then
+                    table.insert(self._elements, {obj = Arrow, prop = "ImageColor3", tKey = "TextDim"})
+                end
 
                 local OptionsList = Instance.new('ScrollingFrame')
                 OptionsList.ScrollBarImageColor3 = Color3.fromRGB(0, 0, 0)
@@ -1710,9 +1742,9 @@ function Library:create_ui()
                     local extra = self._state and self._size or 0
 
                     if self._state then
-                        ModuleManager._multiplier += self._size
+                        ModuleManager._multiplier = ModuleManager._multiplier + self._size
                     else
-                        ModuleManager._multiplier -= self._size
+                        ModuleManager._multiplier = ModuleManager._multiplier - self._size
                     end
 
                     TweenService:Create(Module, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
@@ -1756,7 +1788,9 @@ function Library:create_ui()
                         Option.Selectable = false
                         Option.BorderSizePixel = 0
                         Option.Parent = OptionsList
-                        table.insert(self._elements, {obj = Option, prop = "TextColor3", tKey = "Text"})
+                        if self._elements then
+                            table.insert(self._elements, {obj = Option, prop = "TextColor3", tKey = "Text"})
+                        end
 
                         Option.MouseButton1Click:Connect(function()
                             if not Library._config._flags[settings.flag] then
@@ -1775,7 +1809,7 @@ function Library:create_ui()
                         end)
 
                         if settings.maximum_options and index > settings.maximum_options then continue end
-                        DropdownManager._size += 19
+                        DropdownManager._size = DropdownManager._size + 19
                         OptionsList.Size = UDim2.fromOffset(210, DropdownManager._size)
                     end
                 end
@@ -1801,7 +1835,7 @@ function Library:create_ui()
                 LayoutOrderModule = LayoutOrderModule + 1
 
                 if self._size == 0 then self._size = 11 end
-                self._size += 27
+                self._size = self._size + 27
 
                 if ModuleManager._state then
                     Module.Size = UDim2.fromOffset(241, 93 + self._size)
@@ -1830,7 +1864,9 @@ function Library:create_ui()
                     TextLabel.TextSize = 11
                     TextLabel.ZIndex = 3
                     TextLabel.Parent = OuterFrame
-                    table.insert(self._elements, {obj = TextLabel, prop = "TextColor3", tKey = "Text"})
+                    if self._elements then
+                        table.insert(self._elements, {obj = TextLabel, prop = "TextColor3", tKey = "Text"})
+                    end
                 end
 
                 if not settings or not settings.disableline then
@@ -1842,7 +1878,9 @@ function Library:create_ui()
                     Divider.Parent = OuterFrame
                     Divider.ZIndex = 2
                     Divider.Position = UDim2.new(0, 0, 0.5, -0.5)
-                    table.insert(self._elements, {obj = Divider, prop = "BackgroundColor3", tKey = "Divider"})
+                    if self._elements then
+                        table.insert(self._elements, {obj = Divider, prop = "BackgroundColor3", tKey = "Divider"})
+                    end
 
                     local Gradient = Instance.new('UIGradient')
                     Gradient.Parent = Divider
@@ -1942,7 +1980,7 @@ function Library:build_interface_tab()
         end
     })
 
-    -- Appearance Module (Color Customization)
+    -- Appearance Module
     local appearance_module = InterfaceTab:create_module({
         title = 'Appearance',
         flag = 'UI_Appearance',
@@ -1960,7 +1998,6 @@ function Library:build_interface_tab()
         appearance_module:create_button({
             title = target,
             callback = function()
-                -- Open color picker dialog (simplified - just set random color for demo)
                 local color = Color3.fromRGB(math.random(100, 255), math.random(100, 255), math.random(100, 255))
                 self:SetColor(target, color)
                 self:Notify({title = 'Color', text = target..' set to '..self:rgbToHex(color), duration = 2})
