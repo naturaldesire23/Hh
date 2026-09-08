@@ -4,6 +4,7 @@
 
 local Library = {}
 Library.__index = Library
+Library._windows = {} -- FIX: Initialize windows table
 
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
@@ -141,7 +142,7 @@ end
 
 function Library.new()
     local self = setmetatable({}, Library)
-    self._windows = {}
+    self._windows = {} -- Ensure windows table exists
     self._connections = Connections
     return self
 end
@@ -162,7 +163,8 @@ function Library:CreateWindow(title)
         _drag_start = nil,
         _container_position = nil,
         _connections = setmetatable({}, {__index = Connections}),
-        _tab_buttons = {}
+        _tab_buttons = {},
+        _windows = self._windows -- Store reference
     }
 
     local function create_ui()
@@ -1599,7 +1601,7 @@ function Library:CreateWindow(title)
     end
 
     create_ui()
-    table.insert(Library._windows, window)
+    table.insert(self._windows, window) -- Use self._windows instead of Library._windows
     return window
 end
 
@@ -1611,27 +1613,5 @@ function Library:Destroy()
     self._connections:disconnect_all()
 end
 
--- Example usage (commented out):
---[[
-local UI = Library.new()
-local main = UI:CreateWindow("My UI")
-
-local tab1 = main:CreateTab("Main", "rbxassetid://6031094678")
-local module1 = tab1:CreateModule({title = "Example Module", description = "This is an example module", section = "left"})
-module1:CreateCheckbox({title = "Enable Feature", callback = function(state) print("Feature enabled:", state) end})
-module1:CreateButton({title = "Click Me", callback = function() print("Button clicked!") end})
-module1:CreateSlider({title = "Volume", minimum_value = 0, maximum_value = 100, value = 50, callback = function(v) print("Volume:", v) end})
-module1:CreateTextbox({title = "Input", placeholder = "Type here...", callback = function(t) print("Text:", t) end})
-module1:CreateDropdown({title = "Select Option", options = {"Option A", "Option B", "Option C"}, callback = function(v) print("Selected:", v) end})
-module1:CreateDivider({title = "Divider"})
-
-local module2 = tab1:CreateModule({title = "Another Module", section = "right"})
-module2:CreateCheckbox({title = "Another Feature", callback = function(s) print("Another:", s) end})
-
-local tab2 = main:CreateTab("Settings", "rbxassetid://6031280882")
-local settings_mod = tab2:CreateModule({title = "Settings", section = "left"})
-settings_mod:CreateCheckbox({title = "Enable Notifications", callback = function(s) end})
-
-UI:Notify({title = "UI Loaded", text = "Welcome to the UI Library!", duration = 3})
---]]
+-- Return the library
 return Library
