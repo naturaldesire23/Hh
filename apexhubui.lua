@@ -1,4 +1,4 @@
--- IceLib UI Library (Fully Functional - Fixed)
+-- IceLib UI Library (Fully Functional & Patched)
 local UserInputService = cloneref and cloneref(game:GetService('UserInputService')) or game:GetService('UserInputService')
 local TweenService = cloneref and cloneref(game:GetService('TweenService')) or game:GetService('TweenService')
 local HttpService = cloneref and cloneref(game:GetService('HttpService')) or game:GetService('HttpService')
@@ -45,7 +45,6 @@ local Connections = setmetatable({}, {
 
 local function convertStringToTable(inputString)
     local result = {}
-    if type(inputString) ~= "string" then return result end
     for value in string.gmatch(inputString, "([^,]+)") do
         local trimmedValue = value:match("^%s*(.-)%s*$")
         table.insert(result, trimmedValue)
@@ -54,7 +53,6 @@ local function convertStringToTable(inputString)
 end
 
 local function convertTableToString(inputTable)
-    if type(inputTable) ~= "table" then return "" end
     return table.concat(inputTable, ", ")
 end
 
@@ -208,7 +206,7 @@ function Library:Notify(settings)
     InnerStroke.Parent = InnerFrame
 
     local Title = Instance.new("TextLabel")
-    Title.Text = settings.title or "Notification"
+    Title.Text = tostring(settings.title or "Notification")
     Title.TextColor3 = Theme.Text
     Title.FontFace = Font.new('rbxasset://fonts/families/SFPro.json', Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     Title.TextSize = 16
@@ -222,7 +220,7 @@ function Library:Notify(settings)
     Title.Parent = InnerFrame
 
     local Body = Instance.new("TextLabel")
-    Body.Text = settings.text or "Notification message"
+    Body.Text = tostring(settings.text or "Notification message")
     Body.TextColor3 = Theme.TextDim
     Body.FontFace = Font.new('rbxasset://fonts/families/SFPro.json', Enum.FontWeight.Bold, Enum.FontStyle.Normal)
     Body.TextSize = 14
@@ -297,14 +295,14 @@ end
 function Library:SetBackground(source, transparency)
     if not self._background then return end
     if source and source ~= '' then
-        self._background.Image = tostring(source)
+        self._background.Image = source
         self._background.Visible = true
         self._background.ImageTransparency = transparency or 0.5
         self._background.ScaleType = Enum.ScaleType.Crop
     else
         self._background.Visible = false
     end
-    self._config._flags['Background_Image'] = tostring(source or '')
+    self._config._flags['Background_Image'] = source or ''
     self._config._flags['Background_Transparency'] = transparency or 0.5
     Config:save(game.GameId, Library._config)
 end
@@ -1336,6 +1334,8 @@ function Library:create_ui()
                     local number_threshold = math.clamp(rounded_number, settings.minimum_value, settings.maximum_value)
 
                     Library._config._flags[settings.flag] = number_threshold
+                    
+                    -- Type safety enforced
                     Value.Text = tostring(number_threshold)
 
                     TweenService:Create(Fill, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
@@ -1468,7 +1468,7 @@ function Library:create_ui()
                 Box.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
                 Box.TextColor3 = Theme.Text
                 Box.TextSize = 12
-                Box.PlaceholderText = settings.placeholder or ''
+                Box.PlaceholderText = tostring(settings.placeholder or '')
                 Box.PlaceholderColor3 = Theme.TextDim
                 Box.ClearTextOnFocus = false
                 Box.Parent = Holder
@@ -1478,10 +1478,11 @@ function Library:create_ui()
                     table.insert(self._elements, {obj = Box, prop = "PlaceholderColor3", tKey = "TextDim"})
                 end
 
-                -- FIX: Ensure Box.Text is always a string
                 if Library._config._flags[settings.flag] ~= nil then
+                    -- Type safety enforced
                     Box.Text = tostring(Library._config._flags[settings.flag])
                 else
+                    -- Type safety enforced
                     Box.Text = tostring(settings.value or '')
                 end
 
@@ -1506,6 +1507,7 @@ function Library:create_ui()
                 end)
 
                 Library._flag_registry[settings.flag] = function(value)
+                    -- Type safety enforced
                     Box.Text = tostring(value or '')
                 end
 
@@ -1694,7 +1696,8 @@ function Library:create_ui()
                         end
 
                         local CurrentTextGet = convertStringToTable(CurrentOption.Text)
-                        local optionSkibidi = typeof(option) ~= 'string' and option.Name or option
+                        -- Type safety enforced for option
+                        local optionSkibidi = (typeof(option) == "string" and option) or (typeof(option) == "Instance" and option.Name) or tostring(option)
 
                         for i, v in pairs(CurrentTextGet) do
                             if v == optionSkibidi then
@@ -1727,7 +1730,8 @@ function Library:create_ui()
                         CurrentOption.Text = table.concat(selected, ", ")
                         Library._config._flags[settings.flag] = convertStringToTable(CurrentOption.Text)
                     else
-                        CurrentOption.Text = (typeof(option) == "string" and option) or (option and option.Name) or ''
+                        -- Type safety enforced
+                        CurrentOption.Text = (typeof(option) == "string" and option) or (typeof(option) == "Instance" and option.Name) or tostring(option)
                         for _, object in OptionsList:GetChildren() do
                             if object.Name == "Option" then
                                 object.TextTransparency = object.Text == CurrentOption.Text and 0.2 or 0.6
