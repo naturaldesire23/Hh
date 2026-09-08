@@ -354,7 +354,7 @@ function Library:create_ui()
     local Background = Instance.new('ImageLabel')
     Background.Name = 'Background'
     Background.Size = UDim2.new(1, 0, 1, 0)
-    Background.Position = UDim2.new(0, 0, 0, 0)
+    Background.Position = UDim2.new(0, 0,0, 0)
     Background.BackgroundTransparency = 1
     Background.BorderSizePixel = 0
     Background.Image = ''
@@ -553,7 +553,7 @@ function Library:create_ui()
     local UIScale = Instance.new('UIScale')
     UIScale.Parent = Container
 
-    -- Expose locals to self for class methods
+    -- Hard bind references to self
     self._ui = IceLibGui
     self._container = Container
     self._background = Background
@@ -619,36 +619,61 @@ end
 
 function Library:change_visibility(state)
     Library._ui_open = state
-    self._shadowholder.Visible = state
-    if state then
-        TweenService:Create(self._container, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-            Size = UDim2.fromOffset(752, 479)
-        }):Play()
-    else
-        TweenService:Create(self._container, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-            Size = UDim2.fromOffset(104.5, 52)
-        }):Play()
+    if not self._shadowholder and self._ui then
+        self._shadowholder = self._ui:FindFirstChild('ShadowHolder')
+    end
+    if not self._container and self._ui then
+        self._container = self._ui:FindFirstChild('Container')
+    end
+    if self._shadowholder then
+        self._shadowholder.Visible = state
+    end
+    if self._container then
+        if state then
+            TweenService:Create(self._container, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                Size = UDim2.fromOffset(752, 479)
+            }):Play()
+        else
+            TweenService:Create(self._container, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                Size = UDim2.fromOffset(104.5, 52)
+            }):Play()
+        end
     end
 end
 
 function Library:load()
     self:get_device()
 
+    if not self._uiscale and self._container then
+        self._uiscale = self._container:FindFirstChildOfClass('UIScale')
+    end
+    if not self._shadowholder and self._ui then
+        self._shadowholder = self._ui:FindFirstChild('ShadowHolder')
+    end
+
     if self._device == 'Mobile' or self._device == 'Unknown' then
         self:get_screen_scale()
-        self._uiscale.Scale = self._ui_scale
+        if self._uiscale then
+            self._uiscale.Scale = self._ui_scale
+        end
 
         Connections['ui_scale'] = workspace.CurrentCamera:GetPropertyChangedSignal('ViewportSize'):Connect(function()
             self:get_screen_scale()
-            self._uiscale.Scale = self._ui_scale
+            if self._uiscale then
+                self._uiscale.Scale = self._ui_scale
+            end
         end)
     end
 
-    self._shadowholder.Visible = true
+    if self._shadowholder then
+        self._shadowholder.Visible = true
+    end
 
-    TweenService:Create(self._container, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-        Size = UDim2.fromOffset(752, 479)
-    }):Play()
+    if self._container then
+        TweenService:Create(self._container, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            Size = UDim2.fromOffset(752, 479)
+        }):Play()
+    end
 
     local saved_bg = self._config._flags['Background_Image']
     if saved_bg and saved_bg ~= '' then
