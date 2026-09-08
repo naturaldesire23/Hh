@@ -1,20 +1,14 @@
 -- UI Library (standalone, no game logic)
--- Load with: local UI = loadstring(game:HttpGet("https://your-url/uilibrary.lua"))()
--- Then: UI:CreateWindow("My Window")
-
 local Library = {}
 Library.__index = Library
-Library._windows = {} -- FIX: Initialize windows table
+Library._windows = {}
 
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local HttpService = game:GetService("HttpService")
 local TextService = game:GetService("TextService")
-local RunService = game:GetService("RunService")
 local Debris = game:GetService("Debris")
-local LocalPlayer = Players.LocalPlayer
 
 local Connections = setmetatable({}, {
     __index = {
@@ -142,7 +136,7 @@ end
 
 function Library.new()
     local self = setmetatable({}, Library)
-    self._windows = {} -- Ensure windows table exists
+    self._windows = {}
     self._connections = Connections
     return self
 end
@@ -163,8 +157,7 @@ function Library:CreateWindow(title)
         _drag_start = nil,
         _container_position = nil,
         _connections = setmetatable({}, {__index = Connections}),
-        _tab_buttons = {},
-        _windows = self._windows -- Store reference
+        _tab_buttons = {}
     }
 
     local function create_ui()
@@ -209,26 +202,6 @@ function Library:CreateWindow(title)
         })
         gradient.Rotation = 90
         gradient.Parent = container
-
-        local side_bar = Instance.new("Frame")
-        side_bar.Name = "GradientSide"
-        side_bar.Parent = container
-        side_bar.Size = UDim2.new(0, 10, 1, 0)
-        side_bar.Position = UDim2.new(0, 0, 0, 0)
-        side_bar.BackgroundTransparency = 1
-
-        local side_gradient = Instance.new("UIGradient")
-        side_gradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0.00, Color3.fromRGB(0, 0, 0)),
-            ColorSequenceKeypoint.new(0.60, Color3.fromRGB(0, 0, 0)),
-            ColorSequenceKeypoint.new(1.00, Color3.fromRGB(8, 8, 8))
-        })
-        side_gradient.Rotation = 90
-        side_gradient.Parent = side_bar
-
-        local side_corner = Instance.new("UICorner")
-        side_corner.CornerRadius = UDim.new(0, 10)
-        side_corner.Parent = side_bar
 
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0, 10)
@@ -432,15 +405,20 @@ function Library:CreateWindow(title)
 
     function window:UpdateTabs(selected_tab)
         local selected_button = selected_tab._button
-        for index, object in self._tabs_frame:GetChildren() do
+        for _, object in self._tabs_frame:GetChildren() do
             if object.Name ~= "Tab" or not object:IsA("TextButton") then
                 continue
             end
 
+            -- Get the children (TextLabel and Icon are children, not direct members)
+            local text_label = object:FindFirstChild("TextLabel")
+            local icon = object:FindFirstChild("Icon")
+            local tab_pin = self._pin
+
             if object == selected_button then
                 if object.BackgroundTransparency ~= 0.5 then
                     local offset = object.LayoutOrder * (0.113 / 1.3)
-                    TweenService:Create(self._pin, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                    TweenService:Create(tab_pin, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
                         Position = UDim2.fromScale(0.026, 0.135 + offset)
                     }):Play()
 
@@ -448,15 +426,19 @@ function Library:CreateWindow(title)
                         BackgroundTransparency = 0.5
                     }):Play()
 
-                    TweenService:Create(object.TextLabel, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                        TextTransparency = 0.2,
-                        TextColor3 = Color3.fromRGB(255, 183, 197)
-                    }):Play()
+                    if text_label then
+                        TweenService:Create(text_label, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                            TextTransparency = 0.2,
+                            TextColor3 = Color3.fromRGB(255, 183, 197)
+                        }):Play()
+                    end
 
-                    TweenService:Create(object.Icon, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                        ImageTransparency = 0.2,
-                        ImageColor3 = Color3.fromRGB(255, 250, 250)
-                    }):Play()
+                    if icon then
+                        TweenService:Create(icon, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                            ImageTransparency = 0.2,
+                            ImageColor3 = Color3.fromRGB(255, 250, 250)
+                        }):Play()
+                    end
                 end
             else
                 if object.BackgroundTransparency ~= 1 then
@@ -464,15 +446,19 @@ function Library:CreateWindow(title)
                         BackgroundTransparency = 1
                     }):Play()
 
-                    TweenService:Create(object.TextLabel, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                        TextTransparency = 0.7,
-                        TextColor3 = Color3.fromRGB(255, 183, 197)
-                    }):Play()
+                    if text_label then
+                        TweenService:Create(text_label, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                            TextTransparency = 0.7,
+                            TextColor3 = Color3.fromRGB(255, 183, 197)
+                        }):Play()
+                    end
 
-                    TweenService:Create(object.Icon, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                        ImageTransparency = 0.8,
-                        ImageColor3 = Color3.fromRGB(255, 255, 255)
-                    }):Play()
+                    if icon then
+                        TweenService:Create(icon, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                            ImageTransparency = 0.8,
+                            ImageColor3 = Color3.fromRGB(255, 255, 255)
+                        }):Play()
+                    end
                 end
             end
         end
@@ -544,6 +530,7 @@ function Library:CreateWindow(title)
         text_label.TextSize = 13
         text_label.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         text_label.Parent = button
+        text_label.Name = "TextLabel"
 
         local text_gradient = Instance.new("UIGradient")
         text_gradient.Color = ColorSequence.new({
@@ -566,9 +553,6 @@ function Library:CreateWindow(title)
         tab_icon.BorderSizePixel = 0
         tab_icon.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         tab_icon.Parent = button
-
-        button.TextLabel = text_label
-        button.Icon = tab_icon
 
         tab._button = button
 
@@ -1570,7 +1554,6 @@ function Library:CreateWindow(title)
                 }
             end
 
-            -- Return the module
             return module
         end
 
@@ -1601,7 +1584,7 @@ function Library:CreateWindow(title)
     end
 
     create_ui()
-    table.insert(self._windows, window) -- Use self._windows instead of Library._windows
+    table.insert(self._windows, window)
     return window
 end
 
@@ -1613,5 +1596,4 @@ function Library:Destroy()
     self._connections:disconnect_all()
 end
 
--- Return the library
 return Library
