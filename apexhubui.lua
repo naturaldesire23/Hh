@@ -1,4 +1,4 @@
--- Sakura UI Library (Cleaned, No Game Logic, No Hardcoded Colors, Transparency Adjusted)
+-- Sakura UI Library (Cleaned, No Game Logic, No Hardcoded Colors, Transparency Adjusted, Options Parent Fixed)
 local UserInputService = cloneref and cloneref(game:GetService('UserInputService')) or game:GetService('UserInputService')
 local ContentProvider = cloneref and cloneref(game:GetService('ContentProvider')) or game:GetService('ContentProvider')
 local TweenService = cloneref and cloneref(game:GetService('TweenService')) or game:GetService('TweenService')
@@ -884,10 +884,10 @@ function Library:create_tab(title, icon)
         local Options = Instance.new('Frame')
         Options.Name = 'Options'
         Options.BackgroundTransparency = 1
-        Options.Position = UDim2.new(0, 0, 1, 0)
+        Options.Position = UDim2.new(0, 0,1, 0)
         Options.Size = UDim2.new(0, 241, 0, 8)
         Options.BorderSizePixel = 0
-        Options.Parent = Module
+        Options.Parent = Header
 
         local UIPadding = Instance.new('UIPadding')
         UIPadding.PaddingTop = UDim.new(0, 8)
@@ -933,6 +933,7 @@ function Library:create_tab(title, icon)
             ModuleManager._state = Library._config._flags[settings.flag]
             settings.callback(ModuleManager._state)
             if ModuleManager._state then
+                Module.Size = UDim2.fromOffset(241, 93 + ModuleManager._size + ModuleManager._multiplier)
                 Toggle.BackgroundColor3 = Theme.Accent
                 Circle.BackgroundColor3 = Theme.Group
                 Circle.Position = UDim2.fromScale(0.53, 0.5)
@@ -1739,7 +1740,7 @@ function Library:build_interface_tab()
                 self:SetColor(target, color)
                 self:Notify({title = 'Color', text = target..' set to '..self:rgbToHex(color), duration = 2})
             end
-        })
+        end
     end
 
     appearance_module:create_button({
