@@ -391,7 +391,7 @@ function Library:create_ui()
     Tabs.BackgroundTransparency = 1
     Tabs.Position = UDim2.new(0.026, 0, 0.111, 0)
     Tabs.BorderSizePixel = 0
-    Tabs.CanvasSize = UDim2.new(0,0, 0.5, 0)
+    Tabs.CanvasSize = UDim2.new(0, 0, 0.5, 0)
     Tabs.Parent = Handler
     
     local UIListLayout_Tabs = Instance.new('UIListLayout')
