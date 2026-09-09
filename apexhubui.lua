@@ -287,7 +287,6 @@ end
 function Library:SetBackground(source, transparency)
     if not self._background then return end
     
-    -- Type check enforced: source must be a string
     if typeof(source) == "string" and source ~= '' then
         self._background.Image = source
         self._background.Visible = true
@@ -334,7 +333,6 @@ function Library:create_ui()
     Container.BorderColor3 = Color3.fromRGB(0, 0, 0)
     Container.AnchorPoint = Vector2.new(0.5, 0.5)
     Container.Name = 'Container'
-    -- Adjusted transparency for a cleaner look
     Container.BackgroundTransparency = 0.2
     Container.BackgroundColor3 = Theme.Background
     Container.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -393,7 +391,7 @@ function Library:create_ui()
     Tabs.BackgroundTransparency = 1
     Tabs.Position = UDim2.new(0.026, 0, 0.111, 0)
     Tabs.BorderSizePixel = 0
-    Tabs.CanvasSize = UDim2.new(0, 0, 0.5, 0)
+    Tabs.CanvasSize = UDim2.new(0,0, 0.5, 0)
     Tabs.Parent = Handler
     
     local UIListLayout_Tabs = Instance.new('UIListLayout')
@@ -558,7 +556,6 @@ function Library:load()
         }):Play()
     end
 
-    -- Enforce string type check on load to prevent boolean crashes
     local saved_bg = self._config._flags['Background_Image']
     if typeof(saved_bg) == "string" and saved_bg ~= '' then
         local trans = self._config._flags['Background_Transparency'] or 0.5
@@ -884,10 +881,11 @@ function Library:create_tab(title, icon)
         local Options = Instance.new('Frame')
         Options.Name = 'Options'
         Options.BackgroundTransparency = 1
-        Options.Position = UDim2.new(0, 0,1, 0)
+        Options.Position = UDim2.new(0, 0, 1, 0)
         Options.Size = UDim2.new(0, 241, 0, 8)
         Options.BorderSizePixel = 0
-        Options.Parent = Header
+        -- Re-parented to Module so it expands correctly within the clip boundary
+        Options.Parent = Module
 
         local UIPadding = Instance.new('UIPadding')
         UIPadding.PaddingTop = UDim.new(0, 8)
@@ -1740,7 +1738,7 @@ function Library:build_interface_tab()
                 self:SetColor(target, color)
                 self:Notify({title = 'Color', text = target..' set to '..self:rgbToHex(color), duration = 2})
             end
-        end
+        })
     end
 
     appearance_module:create_button({
