@@ -1,4 +1,4 @@
--- IceLib UI Library (Fully Functional & Patched)
+-- Cleaned Xinve/IceLib UI Library (No Game Logic, No Hardcoded Colors)
 local UserInputService = cloneref and cloneref(game:GetService('UserInputService')) or game:GetService('UserInputService')
 local TweenService = cloneref and cloneref(game:GetService('TweenService')) or game:GetService('TweenService')
 local HttpService = cloneref and cloneref(game:GetService('HttpService')) or game:GetService('HttpService')
@@ -7,13 +7,13 @@ local RunService = cloneref and cloneref(game:GetService('RunService')) or game:
 local Players = cloneref and cloneref(game:GetService('Players')) or game:GetService('Players')
 local CoreGui = cloneref and cloneref(game:GetService('CoreGui')) or game:GetService('CoreGui')
 local Debris = cloneref and cloneref(game:GetService('Debris')) or game:GetService('Debris')
-local GuiService = cloneref and cloneref(game:GetService('GuiService')) or game:GetService('GuiService')
+local Lighting = cloneref and cloneref(game:GetService('Lighting')) or game:GetService('Lighting')
 
 local LocalPlayer = Players.LocalPlayer
 local mouse = LocalPlayer:GetMouse()
 
-local old_IceLib = CoreGui:FindFirstChild('IceLib')
-if old_IceLib then Debris:AddItem(old_IceLib, 0) end
+local old_Lib = CoreGui:FindFirstChild('IceLib')
+if old_Lib then Debris:AddItem(old_Lib, 0) end
 
 pcall(function()
     if getgenv()._IceLib_Cleanup then
@@ -83,18 +83,15 @@ local Config = setmetatable({
     end
 }, Config)
 
--- Default Theme
 local DefaultTheme = {
-    Background = Color3.fromRGB(0, 0, 0),
-    Group = Color3.fromRGB(20, 20, 20),
+    Background = Color3.fromRGB(20, 20, 20),
+    Group = Color3.fromRGB(30, 30, 30),
     GroupStroke = Color3.fromRGB(45, 45, 45),
-    Control = Color3.fromRGB(30, 30, 30),
-    ControlHover = Color3.fromRGB(40, 40, 40),
-    Divider = Color3.fromRGB(35, 35, 35),
-    Text = Color3.fromRGB(238, 238, 242),
-    TextDim = Color3.fromRGB(142, 142, 151),
-    TextSoft = Color3.fromRGB(195, 195, 202),
-    Accent = Color3.fromRGB(224, 224, 224),
+    Control = Color3.fromRGB(40, 40, 40),
+    Divider = Color3.fromRGB(50, 50, 50),
+    Text = Color3.fromRGB(255, 255, 255),
+    TextDim = Color3.fromRGB(160, 160, 160),
+    Accent = Color3.fromRGB(255, 255, 255),
 }
 
 local Theme = {}
@@ -104,20 +101,13 @@ end
 
 local Library = {
     _config = Config:load(game.GameId, { _flags = {}, _keybinds = {} }),
-    _choosing_keybind = false,
-    _device = nil,
     _ui_open = true,
     _ui_scale = 1,
     _ui = nil,
     _dragging = false,
     _drag_start = nil,
     _container_position = nil,
-    _flag_registry = {},
-    _keybind_registry = {},
     _elements = {},
-    _notif_side = "Right",
-    _notif_opacity = 0.0,
-    _keybind_list = {},
     _background = nil,
     _container = nil,
     _tab = 0
@@ -178,37 +168,28 @@ function Library:Notify(settings)
     local InnerFrame = Instance.new("Frame")
     InnerFrame.Size = UDim2.new(1, 0, 1, 0)
     InnerFrame.Position = UDim2.new(self._notif_side == "Left" and 1 or -1, -320, 0, 0)
-    InnerFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    InnerFrame.BackgroundTransparency = self._notif_opacity
+    InnerFrame.BackgroundColor3 = Theme.Background
     InnerFrame.BorderSizePixel = 0
     InnerFrame.Name = "InnerFrame"
     InnerFrame.ZIndex = 1
     InnerFrame.Parent = Notification
-
-    local InnerGradient = Instance.new("UIGradient")
-    InnerGradient.Color = ColorSequence.new{
-        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(92, 92, 92)),
-        ColorSequenceKeypoint.new(0.34, Color3.fromRGB(18, 18, 18)),
-        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(0, 0, 0))
-    }
-    InnerGradient.Rotation = 90
-    InnerGradient.Parent = InnerFrame
 
     local InnerUICorner = Instance.new("UICorner")
     InnerUICorner.CornerRadius = UDim.new(0, 8)
     InnerUICorner.Parent = InnerFrame
 
     local InnerStroke = Instance.new("UIStroke")
-    InnerStroke.Color = Color3.fromRGB(255, 255, 255)
-    InnerStroke.Transparency = 0.72
+    InnerStroke.Color = Theme.GroupStroke
+    InnerStroke.Transparency = 0.5
     InnerStroke.Thickness = 1
     InnerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     InnerStroke.Parent = InnerFrame
+    table.insert(self._elements, {obj = InnerStroke, prop = "Color", tKey = "GroupStroke"})
 
     local Title = Instance.new("TextLabel")
     Title.Text = tostring(settings.title or "Notification")
     Title.TextColor3 = Theme.Text
-    Title.FontFace = Font.new('rbxasset://fonts/families/SFPro.json', Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    Title.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
     Title.TextSize = 16
     Title.Size = UDim2.new(1, -28, 0, 15)
     Title.Position = UDim2.new(0, 14, 0, 12)
@@ -218,11 +199,12 @@ function Library:Notify(settings)
     Title.TextTruncate = Enum.TextTruncate.AtEnd
     Title.ZIndex = 2
     Title.Parent = InnerFrame
+    table.insert(self._elements, {obj = Title, prop = "TextColor3", tKey = "Text"})
 
     local Body = Instance.new("TextLabel")
     Body.Text = tostring(settings.text or "Notification message")
     Body.TextColor3 = Theme.TextDim
-    Body.FontFace = Font.new('rbxasset://fonts/families/SFPro.json', Enum.FontWeight.Bold, Enum.FontStyle.Normal)
+    Body.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.Regular, Enum.FontStyle.Normal)
     Body.TextSize = 14
     Body.Size = UDim2.new(1, -28, 0, 14)
     Body.Position = UDim2.new(0, 14, 0, 33)
@@ -232,6 +214,7 @@ function Library:Notify(settings)
     Body.TextTruncate = Enum.TextTruncate.AtEnd
     Body.ZIndex = 2
     Body.Parent = InnerFrame
+    table.insert(self._elements, {obj = Body, prop = "TextColor3", tKey = "TextDim"})
 
     task.spawn(function()
         local tweenIn = TweenService:Create(InnerFrame, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
@@ -311,13 +294,9 @@ function Library:SetColor(key, color)
     Theme[key] = color
     for _, element in ipairs(self._elements or {}) do
         if element.tKey == key then
-            if element.stateKey ~= nil then
-                -- Skip state-based elements
-            else
-                pcall(function()
-                    element.obj[element.prop] = color
-                end)
-            end
+            pcall(function()
+                element.obj[element.prop] = color
+            end)
         end
     end
     self._config._flags['Theme_'..key] = self:rgbToHex(color)
@@ -344,17 +323,18 @@ function Library:create_ui()
     Container.AnchorPoint = Vector2.new(0.5, 0.5)
     Container.Name = 'Container'
     Container.BackgroundTransparency = 0
-    Container.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Container.BackgroundColor3 = Theme.Background
     Container.Position = UDim2.new(0.5, 0, 0.5, 0)
     Container.Size = UDim2.new(0, 0, 0, 0)
     Container.Active = true
     Container.BorderSizePixel = 0
     Container.Parent = IceLibGui
+    table.insert(self._elements, {obj = Container, prop = "BackgroundColor3", tKey = "Background"})
 
     local Background = Instance.new('ImageLabel')
     Background.Name = 'Background'
     Background.Size = UDim2.new(1, 0, 1, 0)
-    Background.Position = UDim2.new(0, 0,0, 0)
+    Background.Position = UDim2.new(0, 0, 0, 0)
     Background.BackgroundTransparency = 1
     Background.BorderSizePixel = 0
     Background.Image = ''
@@ -364,83 +344,22 @@ function Library:create_ui()
     Background.ZIndex = 0
     Background.Parent = Container
 
-    local BackgroundCorner = Instance.new('UICorner')
-    BackgroundCorner.CornerRadius = UDim.new(0, 10)
-    BackgroundCorner.Parent = Background
-
-    local ContainerGradient = Instance.new("UIGradient")
-    ContainerGradient.Color = ColorSequence.new{
-        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(92, 92, 92)),
-        ColorSequenceKeypoint.new(0.34, Color3.fromRGB(18, 18, 18)),
-        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(0, 0, 0))
-    }
-    ContainerGradient.Rotation = 90
-    ContainerGradient.Parent = Container
-
-    local ShadowHolder = Instance.new('Frame')
-    ShadowHolder.Name = 'ShadowHolder'
-    ShadowHolder.AnchorPoint = Container.AnchorPoint
-    ShadowHolder.Position = Container.Position
-    ShadowHolder.Size = Container.Size
-    ShadowHolder.BackgroundTransparency = 1
-    ShadowHolder.BorderSizePixel = 0
-    ShadowHolder.ZIndex = 0
-    ShadowHolder.Parent = IceLibGui
-
-    Container:GetPropertyChangedSignal('Position'):Connect(function()
-        ShadowHolder.Position = Container.Position
-    end)
-    Container:GetPropertyChangedSignal('Size'):Connect(function()
-        ShadowHolder.Size = Container.Size
-    end)
-
-    local ShadowOuter = Instance.new('ImageLabel')
-    ShadowOuter.Name = 'SoftShadowOuter'
-    ShadowOuter.AnchorPoint = Vector2.new(0.5, 0.5)
-    ShadowOuter.Position = UDim2.new(0.5, 0, 0.5, 2)
-    ShadowOuter.Size = UDim2.new(1, 58, 1, 58)
-    ShadowOuter.BackgroundTransparency = 1
-    ShadowOuter.BorderSizePixel = 0
-    ShadowOuter.Image = 'rbxassetid://6014261993'
-    ShadowOuter.ImageColor3 = Color3.fromRGB(0, 0, 0)
-    ShadowOuter.ImageTransparency = 0.43
-    ShadowOuter.ScaleType = Enum.ScaleType.Slice
-    ShadowOuter.SliceCenter = Rect.new(49, 49, 450, 450)
-    ShadowOuter.ZIndex = 0
-    ShadowOuter.Parent = ShadowHolder
-
-    local ShadowInner = Instance.new('ImageLabel')
-    ShadowInner.Name = 'SoftShadowInner'
-    ShadowInner.AnchorPoint = Vector2.new(0.5, 0.5)
-    ShadowInner.Position = UDim2.new(0.5, 0, 0.5, 1)
-    ShadowInner.Size = UDim2.new(1, 32, 1, 32)
-    ShadowInner.BackgroundTransparency = 1
-    ShadowInner.BorderSizePixel = 0
-    ShadowInner.Image = 'rbxassetid://6014261993'
-    ShadowInner.ImageColor3 = Color3.fromRGB(0, 0, 0)
-    ShadowInner.ImageTransparency = 0.30
-    ShadowInner.ScaleType = Enum.ScaleType.Slice
-    ShadowInner.SliceCenter = Rect.new(49, 49, 450, 450)
-    ShadowInner.ZIndex = 0
-    ShadowInner.Parent = ShadowHolder
-
     local UICorner = Instance.new('UICorner')
     UICorner.CornerRadius = UDim.new(0, 10)
     UICorner.Parent = Container
 
     local UIStroke = Instance.new('UIStroke')
     UIStroke.Color = Theme.GroupStroke
-    UIStroke.Transparency = 0.58
+    UIStroke.Transparency = 0.5
     UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     UIStroke.Parent = Container
+    table.insert(self._elements, {obj = UIStroke, prop = "Color", tKey = "GroupStroke"})
 
     local Handler = Instance.new('Frame')
     Handler.BackgroundTransparency = 1
     Handler.Name = 'Handler'
-    Handler.BorderColor3 = Color3.fromRGB(0, 0, 0)
-    Handler.Size = UDim2.new(0, 752, 0, 479)
+    Handler.Size = UDim2.new(0, 698, 0, 479)
     Handler.BorderSizePixel = 0
-    Handler.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     Handler.Parent = Container
 
     local Tabs = Instance.new('ScrollingFrame')
@@ -452,8 +371,6 @@ function Library:create_ui()
     Tabs.AutomaticCanvasSize = Enum.AutomaticSize.XY
     Tabs.BackgroundTransparency = 1
     Tabs.Position = UDim2.new(0, 18, 0, 67)
-    Tabs.BorderColor3 = Color3.fromRGB(0, 0, 0)
-    Tabs.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     Tabs.BorderSizePixel = 0
     Tabs.CanvasSize = UDim2.new(0, 0, 0.5, 0)
     Tabs.Parent = Handler
@@ -466,7 +383,6 @@ function Library:create_ui()
     local ClientName = Instance.new('TextLabel')
     ClientName.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.Heavy, Enum.FontStyle.Normal)
     ClientName.TextColor3 = Theme.Text
-    ClientName.TextTransparency = 0
     ClientName.Text = 'IceLib'
     ClientName.Name = 'ClientName'
     ClientName.Size = UDim2.new(0, 110, 0, 19)
@@ -474,28 +390,13 @@ function Library:create_ui()
     ClientName.Position = UDim2.new(0, 43, 0, 26)
     ClientName.BackgroundTransparency = 1
     ClientName.TextXAlignment = Enum.TextXAlignment.Left
-    ClientName.BorderSizePixel = 0
     ClientName.TextSize = 16
     ClientName.Parent = Handler
     table.insert(self._elements, {obj = ClientName, prop = "TextColor3", tKey = "Text"})
 
-    local Logo = Instance.new('ImageLabel')
-    Logo.Name = 'Logo'
-    Logo.Size = UDim2.new(0, 26, 0, 26)
-    Logo.AnchorPoint = Vector2.new(0, 0.5)
-    Logo.Position = UDim2.new(0, 14, 0, 26)
-    Logo.BackgroundTransparency = 1
-    Logo.BorderSizePixel = 0
-    Logo.Image = 'rbxassetid://119051552929078'
-    Logo.ImageColor3 = Color3.fromRGB(255, 255, 255)
-    Logo.ImageTransparency = 0
-    Logo.ScaleType = Enum.ScaleType.Fit
-    Logo.Parent = Handler
-
     local Pin = Instance.new('Frame')
     Pin.Name = 'Pin'
     Pin.Position = UDim2.new(0, 18, 0, 79)
-    Pin.BorderColor3 = Color3.fromRGB(0, 0, 0)
     Pin.Size = UDim2.new(0, 2, 0, 16)
     Pin.BorderSizePixel = 0
     Pin.BackgroundColor3 = Theme.Accent
@@ -510,7 +411,6 @@ function Library:create_ui()
     Divider.Name = 'Divider'
     Divider.BackgroundTransparency = 0.65
     Divider.Position = UDim2.new(0, 164, 0, 75)
-    Divider.BorderColor3 = Color3.fromRGB(0, 0, 0)
     Divider.Size = UDim2.new(0, 1, 0, 330)
     Divider.BorderSizePixel = 0
     Divider.BackgroundColor3 = Theme.Divider
@@ -523,37 +423,19 @@ function Library:create_ui()
 
     local Minimize = Instance.new('TextButton')
     Minimize.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-    Minimize.TextColor3 = Color3.fromRGB(0, 0, 0)
-    Minimize.BorderColor3 = Color3.fromRGB(0, 0, 0)
+    Minimize.TextColor3 = Theme.Text
     Minimize.Text = ''
     Minimize.AutoButtonColor = false
     Minimize.Name = 'Minimize'
     Minimize.BackgroundTransparency = 1
     Minimize.Position = UDim2.new(0.02, 0, 0.029, 0)
     Minimize.Size = UDim2.new(0, 24, 0, 24)
-    Minimize.BorderSizePixel = 0
     Minimize.TextSize = 14
-    Minimize.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     Minimize.Parent = Handler
-
-    local Search = Instance.new('ImageButton')
-    Search.Name = 'Search'
-    Search.AutoButtonColor = false
-    Search.BackgroundTransparency = 1
-    Search.BorderSizePixel = 0
-    Search.Image = 'rbxassetid://102373102520464'
-    Search.ImageColor3 = Color3.fromRGB(188, 188, 188)
-    Search.ImageTransparency = 0
-    Search.ScaleType = Enum.ScaleType.Fit
-    Search.AnchorPoint = Vector2.new(1, 0.5)
-    Search.Position = UDim2.new(0, 734, 0, 26)
-    Search.Size = UDim2.new(0, 22, 0, 22)
-    Search.Parent = Handler
 
     local UIScale = Instance.new('UIScale')
     UIScale.Parent = Container
 
-    -- Hard bind references to self
     self._ui = IceLibGui
     self._container = Container
     self._background = Background
@@ -561,7 +443,7 @@ function Library:create_ui()
     self._sections = Sections
     self._pin = Pin
     self._handler = Handler
-    self._shadowholder = ShadowHolder
+    self._shadowholder = nil 
     self._uiscale = UIScale
 
     local function on_drag(input)
@@ -619,19 +501,10 @@ end
 
 function Library:change_visibility(state)
     Library._ui_open = state
-    if not self._shadowholder and self._ui then
-        self._shadowholder = self._ui:FindFirstChild('ShadowHolder')
-    end
-    if not self._container and self._ui then
-        self._container = self._ui:FindFirstChild('Container')
-    end
-    if self._shadowholder then
-        self._shadowholder.Visible = state
-    end
     if self._container then
         if state then
             TweenService:Create(self._container, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                Size = UDim2.fromOffset(752, 479)
+                Size = UDim2.fromOffset(698, 479)
             }):Play()
         else
             TweenService:Create(self._container, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
@@ -644,19 +517,11 @@ end
 function Library:load()
     self:get_device()
 
-    if not self._uiscale and self._container then
-        self._uiscale = self._container:FindFirstChildOfClass('UIScale')
-    end
-    if not self._shadowholder and self._ui then
-        self._shadowholder = self._ui:FindFirstChild('ShadowHolder')
-    end
-
     if self._device == 'Mobile' or self._device == 'Unknown' then
         self:get_screen_scale()
         if self._uiscale then
             self._uiscale.Scale = self._ui_scale
         end
-
         Connections['ui_scale'] = workspace.CurrentCamera:GetPropertyChangedSignal('ViewportSize'):Connect(function()
             self:get_screen_scale()
             if self._uiscale then
@@ -665,13 +530,9 @@ function Library:load()
         end)
     end
 
-    if self._shadowholder then
-        self._shadowholder.Visible = true
-    end
-
     if self._container then
         TweenService:Create(self._container, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-            Size = UDim2.fromOffset(752, 479)
+            Size = UDim2.fromOffset(698, 479)
         }):Play()
     end
 
@@ -712,13 +573,6 @@ function Library:update_tabs(tab)
                         TextColor3 = Theme.Text
                     }):Play()
                 end
-
-                local icon = object:FindFirstChild("Icon")
-                if icon then
-                    TweenService:Create(icon, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                        ImageColor3 = icon:GetAttribute('ActiveColor') or Theme.Text
-                    }):Play()
-                end
             end
         else
             if object.BackgroundTransparency ~= 1 then
@@ -729,15 +583,8 @@ function Library:update_tabs(tab)
                 local textLabel = object:FindFirstChild("TextLabel")
                 if textLabel then
                     TweenService:Create(textLabel, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                        TextTransparency = 0,
+                        TextTransparency = 0.2,
                         TextColor3 = Theme.TextDim
-                    }):Play()
-                end
-
-                local icon = object:FindFirstChild("Icon")
-                if icon then
-                    TweenService:Create(icon, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                        ImageColor3 = icon:GetAttribute('IdleColor') or Theme.TextDim
                     }):Play()
                 end
             end
@@ -770,7 +617,6 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
     local Tab = Instance.new('TextButton')
     Tab.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
     Tab.TextColor3 = Color3.fromRGB(0, 0, 0)
-    Tab.BorderColor3 = Color3.fromRGB(0, 0, 0)
     Tab.Text = ''
     Tab.AutoButtonColor = false
     Tab.BackgroundTransparency = 1
@@ -778,9 +624,10 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
     Tab.Size = UDim2.new(0, 129, 0, 38)
     Tab.BorderSizePixel = 0
     Tab.TextSize = 14
-    Tab.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+    Tab.BackgroundColor3 = Theme.Control
     Tab.Parent = self._tabs
     Tab.LayoutOrder = self._tab
+    table.insert(self._elements, {obj = Tab, prop = "BackgroundColor3", tKey = "Control"})
 
     local TabCorner = Instance.new('UICorner')
     TabCorner.CornerRadius = UDim.new(0, 5)
@@ -789,46 +636,25 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
     local TextLabel = Instance.new('TextLabel')
     TextLabel.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
     TextLabel.TextColor3 = Theme.TextDim
-    TextLabel.TextTransparency = 0
     TextLabel.Text = title
     TextLabel.Size = UDim2.new(0, font_size.X, 0, 16)
     TextLabel.AnchorPoint = Vector2.new(0, 0.5)
     TextLabel.Position = UDim2.new(0, 37, 0.5, 0)
     TextLabel.BackgroundTransparency = 1
     TextLabel.TextXAlignment = Enum.TextXAlignment.Left
-    TextLabel.BorderSizePixel = 0
     TextLabel.TextSize = 13
     TextLabel.Parent = Tab
     TextLabel.Name = 'TextLabel'
     table.insert(self._elements, {obj = TextLabel, prop = "TextColor3", tKey = "TextDim"})
 
-    local Icon = Instance.new('ImageLabel')
-    Icon.Name = 'Icon'
-    Icon.Size = UDim2.new(0, icon_size or 16, 0, icon_size or 16)
-    Icon.AnchorPoint = Vector2.new(0.5, 0.5)
-    Icon.Position = UDim2.new(0, 19, 0.5, 0)
-    Icon.BackgroundTransparency = 1
-    Icon.BorderSizePixel = 0
-    Icon.Image = icon or ''
-    Icon.ImageColor3 = idle_color or Theme.TextDim
-    Icon:SetAttribute('IdleColor', idle_color or Theme.TextDim)
-    Icon:SetAttribute('ActiveColor', active_color or Theme.Text)
-    Icon.ImageTransparency = 0
-    Icon.ScaleType = Enum.ScaleType.Fit
-    Icon.Parent = Tab
-
     local LeftSection = Instance.new('ScrollingFrame')
     LeftSection.Name = 'LeftSection'
     LeftSection.AutomaticCanvasSize = Enum.AutomaticSize.XY
     LeftSection.ScrollBarThickness = 0
-    LeftSection.ScrollBarImageTransparency = 1
     LeftSection.Size = UDim2.new(0, 243, 0, 395)
     LeftSection.Selectable = false
-    LeftSection.AnchorPoint = Vector2.new(0, 0)
     LeftSection.BackgroundTransparency = 1
     LeftSection.Position = UDim2.new(0, 203, 0, 67)
-    LeftSection.BorderColor3 = Color3.fromRGB(0, 0, 0)
-    LeftSection.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     LeftSection.BorderSizePixel = 0
     LeftSection.CanvasSize = UDim2.new(0, 0, 0.5, 0)
     LeftSection.Visible = false
@@ -849,12 +675,8 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
     RightSection.ScrollBarThickness = 0
     RightSection.Size = UDim2.new(0, 243, 0, 395)
     RightSection.Selectable = false
-    RightSection.AnchorPoint = Vector2.new(0, 0)
-    RightSection.ScrollBarImageTransparency = 1
     RightSection.BackgroundTransparency = 1
     RightSection.Position = UDim2.new(0, 474, 0, 67)
-    RightSection.BorderColor3 = Color3.fromRGB(0, 0, 0)
-    RightSection.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     RightSection.BorderSizePixel = 0
     RightSection.CanvasSize = UDim2.new(0, 0, 0.5, 0)
     RightSection.Visible = false
@@ -906,9 +728,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
         Module.BorderSizePixel = 0
         Module.BackgroundColor3 = Theme.Group
         Module.Parent = settings.section
-        if self._elements then
-            table.insert(self._elements, {obj = Module, prop = "BackgroundColor3", tKey = "Group"})
-        end
+        table.insert(self._elements, {obj = Module, prop = "BackgroundColor3", tKey = "Group"})
 
         local UIListLayout_Mod = Instance.new('UIListLayout')
         UIListLayout_Mod.Padding = UDim.new(0, 2)
@@ -921,18 +741,15 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
 
         local ModuleStroke = Instance.new('UIStroke')
         ModuleStroke.Color = Theme.GroupStroke
-        ModuleStroke.Transparency = 0.72
+        ModuleStroke.Transparency = 0.5
         ModuleStroke.Thickness = 1
         ModuleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
         ModuleStroke.Parent = Module
-        if self._elements then
-            table.insert(self._elements, {obj = ModuleStroke, prop = "Color", tKey = "GroupStroke"})
-        end
+        table.insert(self._elements, {obj = ModuleStroke, prop = "Color", tKey = "GroupStroke"})
 
         local Header = Instance.new('TextButton')
         Header.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
         Header.TextColor3 = Color3.fromRGB(0, 0, 0)
-        Header.BorderColor3 = Color3.fromRGB(0, 0, 0)
         Header.Text = ''
         Header.AutoButtonColor = false
         Header.BackgroundTransparency = 1
@@ -940,13 +757,11 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
         Header.Size = UDim2.new(0, 241, 0, 93)
         Header.BorderSizePixel = 0
         Header.TextSize = 14
-        Header.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         Header.Parent = Module
 
         local ModuleName = Instance.new('TextLabel')
         ModuleName.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
         ModuleName.TextColor3 = Theme.Text
-        ModuleName.TextTransparency = 0
         ModuleName.Text = settings.title or "Module"
         ModuleName.Name = 'ModuleName'
         ModuleName.Size = UDim2.new(0, 205, 0, 13)
@@ -954,17 +769,13 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
         ModuleName.Position = UDim2.new(0, 14, 0, 22)
         ModuleName.BackgroundTransparency = 1
         ModuleName.TextXAlignment = Enum.TextXAlignment.Left
-        ModuleName.BorderSizePixel = 0
         ModuleName.TextSize = 13
         ModuleName.Parent = Header
-        if self._elements then
-            table.insert(self._elements, {obj = ModuleName, prop = "TextColor3", tKey = "Text"})
-        end
+        table.insert(self._elements, {obj = ModuleName, prop = "TextColor3", tKey = "Text"})
 
         local Description = Instance.new('TextLabel')
-        Description.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+        Description.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.Regular, Enum.FontStyle.Normal)
         Description.TextColor3 = Theme.TextDim
-        Description.TextTransparency = 0
         Description.Text = settings.description or ''
         Description.Name = 'Description'
         Description.Size = UDim2.new(0, 205, 0, 13)
@@ -972,12 +783,9 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
         Description.Position = UDim2.new(0, 14, 0, 40)
         Description.BackgroundTransparency = 1
         Description.TextXAlignment = Enum.TextXAlignment.Left
-        Description.BorderSizePixel = 0
         Description.TextSize = 10
         Description.Parent = Header
-        if self._elements then
-            table.insert(self._elements, {obj = Description, prop = "TextColor3", tKey = "TextDim"})
-        end
+        table.insert(self._elements, {obj = Description, prop = "TextColor3", tKey = "TextDim"})
 
         local Toggle = Instance.new('Frame')
         Toggle.Name = 'Toggle'
@@ -988,9 +796,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
         Toggle.BorderSizePixel = 0
         Toggle.BackgroundColor3 = Theme.Control
         Toggle.Parent = Header
-        if self._elements then
-            table.insert(self._elements, {obj = Toggle, prop = "BackgroundColor3", tKey = "Control", stateKey = false})
-        end
+        table.insert(self._elements, {obj = Toggle, prop = "BackgroundColor3", tKey = "Control"})
 
         local ToggleCorner = Instance.new('UICorner')
         ToggleCorner.CornerRadius = UDim.new(1, 0)
@@ -1005,9 +811,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
         Circle.BorderSizePixel = 0
         Circle.BackgroundColor3 = Theme.TextDim
         Circle.Parent = Toggle
-        if self._elements then
-            table.insert(self._elements, {obj = Circle, prop = "BackgroundColor3", tKey = "TextDim", stateKey = false})
-        end
+        table.insert(self._elements, {obj = Circle, prop = "BackgroundColor3", tKey = "TextDim"})
 
         local CircleCorner = Instance.new('UICorner')
         CircleCorner.CornerRadius = UDim.new(1, 0)
@@ -1023,9 +827,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
         Divider.BorderSizePixel = 0
         Divider.BackgroundColor3 = Theme.Divider
         Divider.Parent = Header
-        if self._elements then
-            table.insert(self._elements, {obj = Divider, prop = "BackgroundColor3", tKey = "Divider"})
-        end
+        table.insert(self._elements, {obj = Divider, prop = "BackgroundColor3", tKey = "Divider"})
 
         local Divider2 = Instance.new('Frame')
         Divider2.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -1037,18 +839,14 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
         Divider2.BorderSizePixel = 0
         Divider2.BackgroundColor3 = Theme.Divider
         Divider2.Parent = Header
-        if self._elements then
-            table.insert(self._elements, {obj = Divider2, prop = "BackgroundColor3", tKey = "Divider"})
-        end
+        table.insert(self._elements, {obj = Divider2, prop = "BackgroundColor3", tKey = "Divider"})
 
         local Options = Instance.new('Frame')
         Options.Name = 'Options'
         Options.BackgroundTransparency = 1
         Options.Position = UDim2.new(0, 0, 1, 2)
-        Options.BorderColor3 = Color3.fromRGB(0, 0, 0)
         Options.Size = UDim2.new(0, 241, 0, 8)
         Options.BorderSizePixel = 0
-        Options.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         Options.Parent = Module
 
         local UIPadding = Instance.new('UIPadding')
@@ -1116,6 +914,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             end
         end
 
+        Library._flag_registry = Library._flag_registry or {}
         Library._flag_registry[settings.flag] = function(state)
             ModuleManager:change_state(state)
         end
@@ -1158,9 +957,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
             TitleLabel.TextYAlignment = Enum.TextYAlignment.Center
             TitleLabel.Parent = Row
-            if self._elements then
-                table.insert(self._elements, {obj = TitleLabel, prop = "TextColor3", tKey = "Text"})
-            end
+            table.insert(self._elements, {obj = TitleLabel, prop = "TextColor3", tKey = "Text"})
 
             local Toggle = Instance.new("Frame")
             Toggle.Name = "Toggle"
@@ -1170,19 +967,15 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             Toggle.BackgroundColor3 = Theme.Control
             Toggle.BorderSizePixel = 0
             Toggle.Parent = Row
-            if self._elements then
-                table.insert(self._elements, {obj = Toggle, prop = "BackgroundColor3", tKey = "Control", stateKey = false})
-            end
+            table.insert(self._elements, {obj = Toggle, prop = "BackgroundColor3", tKey = "Control"})
 
             local ToggleStroke = Instance.new("UIStroke")
             ToggleStroke.Color = Theme.GroupStroke
-            ToggleStroke.Transparency = 0.62
+            ToggleStroke.Transparency = 0.5
             ToggleStroke.Thickness = 1
             ToggleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
             ToggleStroke.Parent = Toggle
-            if self._elements then
-                table.insert(self._elements, {obj = ToggleStroke, prop = "Color", tKey = "GroupStroke"})
-            end
+            table.insert(self._elements, {obj = ToggleStroke, prop = "Color", tKey = "GroupStroke"})
 
             local ToggleCorner = Instance.new("UICorner")
             ToggleCorner.CornerRadius = UDim.new(1, 0)
@@ -1196,9 +989,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             Knob.BackgroundColor3 = Theme.TextDim
             Knob.BorderSizePixel = 0
             Knob.Parent = Toggle
-            if self._elements then
-                table.insert(self._elements, {obj = Knob, prop = "BackgroundColor3", tKey = "TextDim", stateKey = false})
-            end
+            table.insert(self._elements, {obj = Knob, prop = "BackgroundColor3", tKey = "TextDim"})
 
             local KnobCorner = Instance.new("UICorner")
             KnobCorner.CornerRadius = UDim.new(1, 0)
@@ -1263,14 +1054,12 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             Slider.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
             Slider.TextSize = 14
             Slider.TextColor3 = Color3.fromRGB(0, 0, 0)
-            Slider.BorderColor3 = Color3.fromRGB(0, 0, 0)
             Slider.Text = ''
             Slider.AutoButtonColor = false
             Slider.BackgroundTransparency = 1
             Slider.Name = 'Slider'
             Slider.Size = UDim2.new(0, 207, 0, 33)
             Slider.BorderSizePixel = 0
-            Slider.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
             Slider.Parent = Options
             Slider.LayoutOrder = LayoutOrderModule
 
@@ -1278,18 +1067,13 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             TextLabel.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
             TextLabel.TextSize = 12
             TextLabel.TextColor3 = Theme.Text
-            TextLabel.TextTransparency = 0
             TextLabel.Text = settings.title
             TextLabel.Size = UDim2.new(0, 160, 0, 14)
             TextLabel.Position = UDim2.new(0, 0, 0, 0)
             TextLabel.BackgroundTransparency = 1
             TextLabel.TextXAlignment = Enum.TextXAlignment.Left
-            TextLabel.BorderSizePixel = 0
-            TextLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
             TextLabel.Parent = Slider
-            if self._elements then
-                table.insert(self._elements, {obj = TextLabel, prop = "TextColor3", tKey = "Text"})
-            end
+            table.insert(self._elements, {obj = TextLabel, prop = "TextColor3", tKey = "Text"})
 
             local Drag = Instance.new('Frame')
             Drag.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -1301,9 +1085,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             Drag.BorderSizePixel = 0
             Drag.BackgroundColor3 = Theme.Group
             Drag.Parent = Slider
-            if self._elements then
-                table.insert(self._elements, {obj = Drag, prop = "BackgroundColor3", tKey = "Group"})
-            end
+            table.insert(self._elements, {obj = Drag, prop = "BackgroundColor3", tKey = "Group"})
 
             local DragCorner = Instance.new('UICorner')
             DragCorner.CornerRadius = UDim.new(1, 0)
@@ -1319,9 +1101,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             Fill.BorderSizePixel = 0
             Fill.BackgroundColor3 = Theme.Accent
             Fill.Parent = Drag
-            if self._elements then
-                table.insert(self._elements, {obj = Fill, prop = "BackgroundColor3", tKey = "Accent"})
-            end
+            table.insert(self._elements, {obj = Fill, prop = "BackgroundColor3", tKey = "Accent"})
 
             local FillCorner = Instance.new('UICorner')
             FillCorner.CornerRadius = UDim.new(0, 3)
@@ -1336,9 +1116,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             Circle.BorderSizePixel = 0
             Circle.BackgroundColor3 = Theme.Accent
             Circle.Parent = Fill
-            if self._elements then
-                table.insert(self._elements, {obj = Circle, prop = "BackgroundColor3", tKey = "Accent"})
-            end
+            table.insert(self._elements, {obj = Circle, prop = "BackgroundColor3", tKey = "Accent"})
 
             local CircleCorner = Instance.new('UICorner')
             CircleCorner.CornerRadius = UDim.new(1, 0)
@@ -1346,8 +1124,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
 
             local Value = Instance.new('TextLabel')
             Value.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-            Value.TextColor3 = Theme.TextSoft
-            Value.TextTransparency = 0.2
+            Value.TextColor3 = Theme.TextDim
             Value.Text = '50'
             Value.Name = 'Value'
             Value.Size = UDim2.new(0, 42, 0, 13)
@@ -1355,12 +1132,9 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             Value.Position = UDim2.new(1, 0, 0, 0)
             Value.BackgroundTransparency = 1
             Value.TextXAlignment = Enum.TextXAlignment.Right
-            Value.BorderSizePixel = 0
             Value.TextSize = 10
             Value.Parent = Slider
-            if self._elements then
-                table.insert(self._elements, {obj = Value, prop = "TextColor3", tKey = "TextSoft"})
-            end
+            table.insert(self._elements, {obj = Value, prop = "TextColor3", tKey = "TextDim"})
 
             function SliderManager:set_percentage(percentage)
                 local rounded_number = 0
@@ -1456,10 +1230,8 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             Btn.AutoButtonColor = false
             Btn.Text = settings.title
             Btn.Parent = Holder
-            if self._elements then
-                table.insert(self._elements, {obj = Btn, prop = "BackgroundColor3", tKey = "Control"})
-                table.insert(self._elements, {obj = Btn, prop = "TextColor3", tKey = "Text"})
-            end
+            table.insert(self._elements, {obj = Btn, prop = "BackgroundColor3", tKey = "Control"})
+            table.insert(self._elements, {obj = Btn, prop = "TextColor3", tKey = "Text"})
 
             local BtnCorner = Instance.new('UICorner')
             BtnCorner.CornerRadius = UDim.new(0, 4)
@@ -1467,13 +1239,11 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
 
             local BtnStroke = Instance.new('UIStroke')
             BtnStroke.Color = Theme.GroupStroke
-            BtnStroke.Transparency = 0.72
+            BtnStroke.Transparency = 0.5
             BtnStroke.Thickness = 1
             BtnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
             BtnStroke.Parent = Btn
-            if self._elements then
-                table.insert(self._elements, {obj = BtnStroke, prop = "Color", tKey = "GroupStroke"})
-            end
+            table.insert(self._elements, {obj = BtnStroke, prop = "Color", tKey = "GroupStroke"})
 
             Btn.MouseButton1Click:Connect(settings.callback)
         end
@@ -1511,11 +1281,9 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             Box.PlaceholderColor3 = Theme.TextDim
             Box.ClearTextOnFocus = false
             Box.Parent = Holder
-            if self._elements then
-                table.insert(self._elements, {obj = Box, prop = "BackgroundColor3", tKey = "Control"})
-                table.insert(self._elements, {obj = Box, prop = "TextColor3", tKey = "Text"})
-                table.insert(self._elements, {obj = Box, prop = "PlaceholderColor3", tKey = "TextDim"})
-            end
+            table.insert(self._elements, {obj = Box, prop = "BackgroundColor3", tKey = "Control"})
+            table.insert(self._elements, {obj = Box, prop = "TextColor3", tKey = "Text"})
+            table.insert(self._elements, {obj = Box, prop = "PlaceholderColor3", tKey = "TextDim"})
 
             if Library._config._flags[settings.flag] ~= nil then
                 Box.Text = tostring(Library._config._flags[settings.flag])
@@ -1529,13 +1297,11 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
 
             local BoxStroke = Instance.new('UIStroke')
             BoxStroke.Color = Theme.GroupStroke
-            BoxStroke.Transparency = 0.72
+            BoxStroke.Transparency = 0.5
             BoxStroke.Thickness = 1
             BoxStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
             BoxStroke.Parent = Box
-            if self._elements then
-                table.insert(self._elements, {obj = BoxStroke, prop = "Color", tKey = "GroupStroke"})
-            end
+            table.insert(self._elements, {obj = BoxStroke, prop = "Color", tKey = "GroupStroke"})
 
             Box.FocusLost:Connect(function()
                 Library._config._flags[settings.flag] = Box.Text
@@ -1572,7 +1338,6 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             local Dropdown = Instance.new('TextButton')
             Dropdown.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
             Dropdown.TextColor3 = Color3.fromRGB(0, 0, 0)
-            Dropdown.BorderColor3 = Color3.fromRGB(0, 0, 0)
             Dropdown.Text = ''
             Dropdown.AutoButtonColor = false
             Dropdown.BackgroundTransparency = 1
@@ -1580,7 +1345,6 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             Dropdown.Size = UDim2.new(0, 210, 0, 45)
             Dropdown.BorderSizePixel = 0
             Dropdown.TextSize = 14
-            Dropdown.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
             Dropdown.Parent = Options
 
             if not settings.Order then
@@ -1597,16 +1361,12 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             TextLabel.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
             TextLabel.TextSize = 11
             TextLabel.TextColor3 = Theme.Text
-            TextLabel.TextTransparency = 0.2
             TextLabel.Text = settings.title
             TextLabel.Size = UDim2.new(0, 207, 0, 13)
             TextLabel.BackgroundTransparency = 1
             TextLabel.TextXAlignment = Enum.TextXAlignment.Left
-            TextLabel.BorderSizePixel = 0
             TextLabel.Parent = Dropdown
-            if self._elements then
-                table.insert(self._elements, {obj = TextLabel, prop = "TextColor3", tKey = "Text"})
-            end
+            table.insert(self._elements, {obj = TextLabel, prop = "TextColor3", tKey = "Text"})
 
             local Box = Instance.new('Frame')
             Box.ClipsDescendants = true
@@ -1619,9 +1379,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             Box.BorderSizePixel = 0
             Box.BackgroundColor3 = Theme.Control
             Box.Parent = TextLabel
-            if self._elements then
-                table.insert(self._elements, {obj = Box, prop = "BackgroundColor3", tKey = "Control"})
-            end
+            table.insert(self._elements, {obj = Box, prop = "BackgroundColor3", tKey = "Control"})
 
             local BoxCorner = Instance.new('UICorner')
             BoxCorner.CornerRadius = UDim.new(0, 5)
@@ -1629,13 +1387,11 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
 
             local BoxStroke = Instance.new('UIStroke')
             BoxStroke.Color = Theme.GroupStroke
-            BoxStroke.Transparency = 0.48
+            BoxStroke.Transparency = 0.5
             BoxStroke.Thickness = 1
             BoxStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
             BoxStroke.Parent = Box
-            if self._elements then
-                table.insert(self._elements, {obj = BoxStroke, prop = "Color", tKey = "GroupStroke"})
-            end
+            table.insert(self._elements, {obj = BoxStroke, prop = "Color", tKey = "GroupStroke"})
 
             local Header = Instance.new('Frame')
             Header.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -1650,19 +1406,15 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             local CurrentOption = Instance.new('TextLabel')
             CurrentOption.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
             CurrentOption.TextColor3 = Theme.Text
-            CurrentOption.TextTransparency = 0
             CurrentOption.Name = 'CurrentOption'
             CurrentOption.Size = UDim2.new(0, 164, 0, 16)
             CurrentOption.AnchorPoint = Vector2.new(0, 0.5)
             CurrentOption.Position = UDim2.new(0, 10, 0.5, 0)
             CurrentOption.BackgroundTransparency = 1
             CurrentOption.TextXAlignment = Enum.TextXAlignment.Left
-            CurrentOption.BorderSizePixel = 0
             CurrentOption.TextSize = 11
             CurrentOption.Parent = Header
-            if self._elements then
-                table.insert(self._elements, {obj = CurrentOption, prop = "TextColor3", tKey = "Text"})
-            end
+            table.insert(self._elements, {obj = CurrentOption, prop = "TextColor3", tKey = "Text"})
 
             local Arrow = Instance.new('ImageLabel')
             Arrow.BorderColor3 = Color3.fromRGB(0, 0, 0)
@@ -1675,9 +1427,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
             Arrow.Size = UDim2.new(0, 9, 0, 9)
             Arrow.BorderSizePixel = 0
             Arrow.Parent = Header
-            if self._elements then
-                table.insert(self._elements, {obj = Arrow, prop = "ImageColor3", tKey = "TextDim"})
-            end
+            table.insert(self._elements, {obj = Arrow, prop = "ImageColor3", tKey = "TextDim"})
 
             local OptionsList = Instance.new('ScrollingFrame')
             OptionsList.ScrollBarImageColor3 = Color3.fromRGB(0, 0, 0)
@@ -1829,9 +1579,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
                     Option.Selectable = false
                     Option.BorderSizePixel = 0
                     Option.Parent = OptionsList
-                    if self._elements then
-                        table.insert(self._elements, {obj = Option, prop = "TextColor3", tKey = "Text"})
-                    end
+                    table.insert(self._elements, {obj = Option, prop = "TextColor3", tKey = "Text"})
 
                     Option.MouseButton1Click:Connect(function()
                         if not Library._config._flags[settings.flag] then
@@ -1894,7 +1642,6 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
                 local TextLabel = Instance.new('TextLabel')
                 TextLabel.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
                 TextLabel.TextColor3 = Theme.Text
-                TextLabel.TextTransparency = 0
                 TextLabel.Text = settings.title
                 TextLabel.Size = UDim2.new(0, 153, 0, 13)
                 TextLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -1905,9 +1652,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
                 TextLabel.TextSize = 11
                 TextLabel.ZIndex = 3
                 TextLabel.Parent = OuterFrame
-                if self._elements then
-                    table.insert(self._elements, {obj = TextLabel, prop = "TextColor3", tKey = "Text"})
-                end
+                table.insert(self._elements, {obj = TextLabel, prop = "TextColor3", tKey = "Text"})
             end
 
             if not settings or not settings.disableline then
@@ -1919,9 +1664,7 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
                 Divider.Parent = OuterFrame
                 Divider.ZIndex = 2
                 Divider.Position = UDim2.new(0, 0, 0.5, -0.5)
-                if self._elements then
-                    table.insert(self._elements, {obj = Divider, prop = "BackgroundColor3", tKey = "Divider"})
-                end
+                table.insert(self._elements, {obj = Divider, prop = "BackgroundColor3", tKey = "Divider"})
 
                 local Gradient = Instance.new('UIGradient')
                 Gradient.Parent = Divider
@@ -1947,11 +1690,9 @@ function Library:create_tab(title, icon, icon_size, idle_color, active_color)
     return TabManager
 end
 
--- Build Interface Tab with Background and Appearance controls
 function Library:build_interface_tab()
     local InterfaceTab = self:create_tab('Interface', 'rbxassetid://94381583400007', 16, Color3.fromRGB(100, 100, 100), Color3.fromRGB(190, 190, 190))
 
-    -- Background Module
     local bg_module = InterfaceTab:create_module({
         title = 'Background',
         flag = 'UI_Background',
@@ -2006,7 +1747,6 @@ function Library:build_interface_tab()
         end
     })
 
-    -- Appearance Module
     local appearance_module = InterfaceTab:create_module({
         title = 'Appearance',
         flag = 'UI_Appearance',
@@ -2016,8 +1756,7 @@ function Library:build_interface_tab()
     })
 
     local color_targets = {
-        'Text', 'TextDim', 'TextSoft',
-        'Accent', 'Group', 'Control', 'Divider'
+        'Text', 'TextDim', 'Accent', 'Group', 'Control', 'Divider', 'Background', 'GroupStroke'
     }
 
     for _, target in ipairs(color_targets) do
