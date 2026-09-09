@@ -1,4 +1,4 @@
--- Sakura UI Library (Cleaned, No Game Logic, No Hardcoded Colors)
+-- Sakura UI Library (Cleaned, No Game Logic, No Hardcoded Colors, Transparency Adjusted)
 local UserInputService = cloneref and cloneref(game:GetService('UserInputService')) or game:GetService('UserInputService')
 local ContentProvider = cloneref and cloneref(game:GetService('ContentProvider')) or game:GetService('ContentProvider')
 local TweenService = cloneref and cloneref(game:GetService('TweenService')) or game:GetService('TweenService')
@@ -167,7 +167,7 @@ function Library:Notify(settings)
     InnerFrame.Size = UDim2.new(1, 0, 0, 72)
     InnerFrame.Position = UDim2.new(0, 0, 0, 0)
     InnerFrame.BackgroundColor3 = Theme.Background
-    InnerFrame.BackgroundTransparency = 0
+    InnerFrame.BackgroundTransparency = 0.2
     InnerFrame.BorderSizePixel = 0
     InnerFrame.Name = "InnerFrame"
     InnerFrame.Parent = Notification
@@ -286,7 +286,9 @@ end
 
 function Library:SetBackground(source, transparency)
     if not self._background then return end
-    if source and source ~= '' then
+    
+    -- Type check enforced: source must be a string
+    if typeof(source) == "string" and source ~= '' then
         self._background.Image = source
         self._background.Visible = true
         self._background.ImageTransparency = transparency or 0.5
@@ -294,7 +296,8 @@ function Library:SetBackground(source, transparency)
     else
         self._background.Visible = false
     end
-    self._config._flags['Background_Image'] = source or ''
+    
+    self._config._flags['Background_Image'] = (typeof(source) == "string" and source) or ''
     self._config._flags['Background_Transparency'] = transparency or 0.5
     Config:save(game.GameId, Library._config)
 end
@@ -331,7 +334,8 @@ function Library:create_ui()
     Container.BorderColor3 = Color3.fromRGB(0, 0, 0)
     Container.AnchorPoint = Vector2.new(0.5, 0.5)
     Container.Name = 'Container'
-    Container.BackgroundTransparency = 0
+    -- Adjusted transparency for a cleaner look
+    Container.BackgroundTransparency = 0.2
     Container.BackgroundColor3 = Theme.Background
     Container.Position = UDim2.new(0.5, 0, 0.5, 0)
     Container.Size = UDim2.new(0, 0, 0, 0)
@@ -554,8 +558,9 @@ function Library:load()
         }):Play()
     end
 
+    -- Enforce string type check on load to prevent boolean crashes
     local saved_bg = self._config._flags['Background_Image']
-    if saved_bg and saved_bg ~= '' then
+    if typeof(saved_bg) == "string" and saved_bg ~= '' then
         local trans = self._config._flags['Background_Transparency'] or 0.5
         self:SetBackground(saved_bg, trans)
     end
@@ -763,7 +768,7 @@ function Library:create_tab(title, icon)
 
         local Module = Instance.new('Frame')
         Module.ClipsDescendants = true
-        Module.BackgroundTransparency = 0.5
+        Module.BackgroundTransparency = 0.2
         Module.Position = UDim2.new(0.004, 0, 0, 0)
         Module.Name = 'Module'
         Module.Size = UDim2.new(0, 241, 0, 93)
@@ -827,7 +832,7 @@ function Library:create_tab(title, icon)
         
         local Toggle = Instance.new('Frame')
         Toggle.Name = 'Toggle'
-        Toggle.BackgroundTransparency = 0.7
+        Toggle.BackgroundTransparency = 0.2
         Toggle.Position = UDim2.new(0.820, 0, 0.757, 0)
         Toggle.Size = UDim2.new(0, 25, 0, 12)
         Toggle.BorderSizePixel = 0
@@ -989,7 +994,7 @@ function Library:create_tab(title, icon)
 
             local Box = Instance.new("Frame")
             Box.AnchorPoint = Vector2.new(1, 0.5)
-            Box.BackgroundTransparency = 0.9
+            Box.BackgroundTransparency = 0.2
             Box.Position = UDim2.new(1, 0, 0.5, 0)
             Box.Name = "Box"
             Box.Size = UDim2.new(0, 15, 0, 15)
@@ -1020,14 +1025,14 @@ function Library:create_tab(title, icon)
                 self._state = state
                 if self._state then
                     TweenService:Create(Box, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                        BackgroundTransparency = 0.7
+                        BackgroundTransparency = 0.2
                     }):Play()
                     TweenService:Create(Fill, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
                         Size = UDim2.fromOffset(9, 9)
                     }):Play()
                 else
                     TweenService:Create(Box, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                        BackgroundTransparency = 0.9
+                        BackgroundTransparency = 0.2
                     }):Play()
                     TweenService:Create(Fill, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
                         Size = UDim2.fromOffset(0, 0)
@@ -1126,7 +1131,7 @@ function Library:create_tab(title, icon)
             
             local Drag = Instance.new('Frame')
             Drag.AnchorPoint = Vector2.new(0.5, 1)
-            Drag.BackgroundTransparency = 0.9
+            Drag.BackgroundTransparency = 0.2
             Drag.Position = UDim2.new(0.5, 0, 0.950, 0)
             Drag.Name = 'Drag'
             Drag.Size = UDim2.new(0, 207, 0, 4)
@@ -1141,7 +1146,7 @@ function Library:create_tab(title, icon)
             
             local Fill = Instance.new('Frame')
             Fill.AnchorPoint = Vector2.new(0, 0.5)
-            Fill.BackgroundTransparency = 0.5
+            Fill.BackgroundTransparency = 0.2
             Fill.Position = UDim2.new(0, 0, 0.5, 0)
             Fill.Name = 'Fill'
             Fill.Size = UDim2.new(0, 103, 0, 4)
@@ -1287,7 +1292,7 @@ function Library:create_tab(title, icon)
             Textbox.BorderSizePixel = 0
             Textbox.TextSize = 10
             Textbox.BackgroundColor3 = Theme.Control
-            Textbox.BackgroundTransparency = 0.9
+            Textbox.BackgroundTransparency = 0.2
             Textbox.ClearTextOnFocus = false
             Textbox.Parent = Options
             Textbox.LayoutOrder = LayoutOrderModule
@@ -1361,7 +1366,7 @@ function Library:create_tab(title, icon)
             local Box = Instance.new('Frame')
             Box.ClipsDescendants = true
             Box.AnchorPoint = Vector2.new(0.5, 0)
-            Box.BackgroundTransparency = 0.9
+            Box.BackgroundTransparency = 0.2
             Box.Position = UDim2.new(0.5, 0, 1.200, 0)
             Box.Name = 'Box'
             Box.Size = UDim2.new(0, 207, 0, 22)
@@ -1678,6 +1683,7 @@ function Library:build_interface_tab()
                 local bg_flag = self._config._flags['UI_Background']
                 self._background.Visible = bg_flag ~= false
             else
+                self:SetBackground('', 0.5)
                 self._background.Visible = false
             end
         end
@@ -1703,7 +1709,7 @@ function Library:build_interface_tab()
         title = 'Reset Background',
         callback = function()
             if self._background then
-                self._background.Image = ''
+                self:SetBackground('', 0.5)
                 self._background.Visible = false
                 self._config._flags['Background_Image'] = ''
                 self._config._flags['Background_Transparency'] = 0.5
